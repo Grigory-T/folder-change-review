@@ -12,8 +12,19 @@ No Python or installation is required.
 1. Put the EXE in a separate **local** folder outside the project.
 2. Double-click it, choose the project folder and click **Create state**.
 3. At another time, create another state of the same folder.
-4. Choose **Earlier state (A)** and **Later state (B)** from the lists, then click **Compare states**.
+4. In **Compare saved states**, choose **Before (A)** and **After (B)**, then click **Create Excel report**.
 5. The `.xlsx` report appears beside the EXE. **Open report folder** opens that folder.
+
+The window has two independent numbered blocks: **Create a state** and
+**Compare saved states**. You can compare existing captures without creating a
+new state or having the project folder online. Each block has its own status;
+progress appears only while that action is running and disappears afterward.
+The selected A/B pair stays selected after comparison. Identical selections
+disable the report button; a reverse-time selection is explained before running.
+
+Aligned controls and scrolling cards support smaller windows and larger fonts.
+The report-folder control stays visible. Long folder paths remain selectable
+and can be scrolled horizontally for inspection.
 
 Capture dates and file counts identify states in the chooser. State files and
 settings are managed automatically in a hidden `.states` folder beside the EXE.
@@ -113,6 +124,8 @@ once; this setup step may access the internet. `RUN.bat` subsequently runs the
 prepared local Python environment without downloading anything.
 On other platforms: `uv sync --frozen --group test`, then
 `uv run --offline --group test python -B -m unittest discover -s tests -v`.
+For real Tk workflow/layout tests on headless Linux, prefix this command with
+`xvfb-run -a`; UI tests skip if a display is unavailable.
 openpyxl is a test reader only.
 
 On Windows x86-64, `BUILD-EXE.bat` prepares Python 3.13.14 and hash-locked

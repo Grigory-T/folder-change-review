@@ -22,7 +22,7 @@ from runtime_safety import absolute, application_directory, extended, inside, of
 from state_store import read_container, write_container
 
 sys.dont_write_bytecode = True
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 SNAPSHOT_FORMAT = "folder-change-review.snapshot"
 EXCLUSIONS = ["~*", "Thumbs.db", "*.tmp", "*.temp"]
 MAX_DATA_ROWS = 1_048_570  # header row 6, data from row 7
