@@ -41,7 +41,9 @@ Case-insensitive filename exclusions: `~*`, `Thumbs.db`, `*.tmp`, `*.temp`.
 Empty directories are irrelevant. Links, junctions and other reparse points
 are skipped and their count is reported. Other read/enumeration failures abort
 the snapshot, preserving an existing output. Basic file-change detection during
-hashing rejects observed size, modification-time or identity changes; a live
+hashing reads only the initial file size plus a one-byte growth probe, and
+rejects premature EOF or observed size, modification-time, change-time and
+identity changes. A continuously growing file is not read indefinitely. A live
 scan is not an atomic point-in-time filesystem snapshot.
 
 Comparison reads only saved states; the original project need not be online.
@@ -63,25 +65,29 @@ are not an OS security sandbox.
 
 One sheet, `Changes`, follows the [Folder Review](https://github.com/Grigory-T/folder-review) flat-table layout:
 title at B2, column numbering at row 4, headers at row 6, data from row 7,
-`№пп` first and `last` last. Headers are blue with black boundary headers.
+`Row number` first and `last` last. Headers are blue with black boundary headers.
 The bordered body is white with no status colors. Calibri 11, 85% zoom, no
 frozen panes, no merged cells, no Excel Table object and no saved pivot.
 Header height is 72 points, matching Folder Review; ordinary row height is 14.5.
-Column numbering and `№пп` are numeric, as in Folder Review.
+Column numbering and `Row number` are numeric, as in Folder Review. Columns
+run from hierarchy/depth through adjacent names, extension, Size A/B, Status
+and Added/Deleted/Changed flags, ending with `last`. Headers and the title are
+English; filenames and paths retain their original text.
 
 The full union includes Added, Deleted, Changed and Unchanged files. Flags
-`Добавлен`, `Удалён`, `Изменён` use numeric 1 or an empty cell, never zero.
+`Added`, `Deleted`, `Changed` use numeric 1 or an empty cell, never zero.
 `last=1` counts all file rows. No Leaf flag or SHA column is exported: hashes
 remain in machine snapshots solely for change detection. Extensions have no dot.
-`Размер A, МБ`/`Размер B, МБ` contain numeric sizes divided by 1,048,576,
+`Size A (MiB)`/`Size B (MiB)` contain numeric sizes divided by 1,048,576,
 displayed with two decimal places; absent files have blank sizes. Underlying
 precision is retained for accurate sums. Format pivot size values to two
 decimal places if Excel does not inherit that number format.
 
 Select the filtered range starting at B6 and choose Insert > PivotTable.
-Use `Уровень 1`, `Уровень 2`, etc. as Rows and sums of `Добавлен`, `Удалён`,
-`Изменён` as Values. Sum `last` for total files. Filter on `Статус` or
-`Расширение` as needed.
+Use `Level 1`, `Level 2`, etc. as Rows and sums of `Added`, `Deleted`,
+`Changed` as Values. Sum `last` for total files. Filter on `Status` or
+`Extension` as needed. With 1/blank flags, Excel may show a blank total when
+a change category has no files; this means zero.
 
 The report computes the lowest common ancestor of all union file directories,
 including deleted branches. That full directory appears once in the title;

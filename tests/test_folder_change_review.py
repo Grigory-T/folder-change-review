@@ -88,7 +88,10 @@ class FolderChangeReviewTests(unittest.TestCase):
         self.assertNotIn("Leaf", headers)
         self.assertNotIn("FullPath", headers)
         self.assertFalse(any("SHA" in name.upper() for name in headers))
-        self.assertEqual(headers[0], "№пп")
+        self.assertEqual(headers[0], "Row number")
+        self.assertEqual(headers, ["Row number", "Level 1", "Leaf depth", "Name without extension",
+                                  "File name", "Extension", "Size A (MiB)", "Size B (MiB)",
+                                  "Status", "Added", "Deleted", "Changed", "last"])
         self.assertEqual(headers[-1], "last")
         self.assertEqual(sheet.max_row, 9)
         self.assertIsNone(sheet.freeze_panes)
@@ -98,17 +101,60 @@ class FolderChangeReviewTests(unittest.TestCase):
         self.assertEqual(sheet["C6"].fill.fgColor.rgb, "FF00B0F0")
         self.assertEqual(list(next(sheet.iter_rows(min_row=4, max_row=4, min_col=2, values_only=True))), list(range(1, len(headers) + 1)))
         for cells in sheet.iter_rows(min_row=7, min_col=2):
-            self.assertEqual(cells[headers.index("Полное имя файла")].data_type, "s")
-            self.assertEqual(cells[headers.index("Добавлен")].value, 1)
-            self.assertEqual(cells[headers.index("Добавлен")].data_type, "n")
-            self.assertIsNone(cells[headers.index("Удалён")].value)
-            self.assertIsNone(cells[headers.index("Размер A, МБ")].value)
-            self.assertEqual(cells[headers.index("Размер B, МБ")].number_format, "#,##0.00")
-            self.assertIn(cells[headers.index("Расширение")].value, ("txt", "pdf"))
+            self.assertEqual(cells[headers.index("File name")].data_type, "s")
+            self.assertEqual(cells[headers.index("Added")].value, 1)
+            self.assertEqual(cells[headers.index("Added")].data_type, "n")
+            self.assertIsNone(cells[headers.index("Deleted")].value)
+            self.assertIsNone(cells[headers.index("Size A (MiB)")].value)
+            self.assertEqual(cells[headers.index("Size B (MiB)")].number_format, "#,##0.00")
+            self.assertIn(cells[headers.index("Extension")].value, ("txt", "pdf"))
             self.assertEqual(cells[-1].value, 1)
             self.assertTrue(all(cell.fill.patternType is None for cell in cells))
             self.assertTrue(all(cell.border.left.style == "thin" for cell in cells))
             self.assertTrue(all(cell.data_type != "f" and cell.hyperlink is None for cell in cells))
+
+    def test_english_order_keeps_sizes_flags_hierarchy_and_names_aligned(self):
+        (self.root / "nested").mkdir()
+        (self.root / "nested/данные.tar.gz").write_bytes(b"before")
+        (self.root / "deleted.pdf").write_bytes(b"deleted")
+        (self.root / ".gitignore").write_bytes(b"")
+        before = self.snapshot("A.fcrstate")
+        (self.root / "nested/данные.tar.gz").write_bytes(b"x" * 1_234_567)
+        (self.root / "deleted.pdf").unlink()
+        (self.root / "zero").write_bytes(b"")
+        after = self.snapshot("B.fcrstate")
+        output = self.work / "aligned.xlsx"
+        app.write_report(app.compare_snapshots(before, after), output)
+        book = load_workbook(output)
+        self.addCleanup(book.close)
+        sheet = book["Changes"]
+        self.assertEqual(sheet["B2"].value, f"Table: File changes in folder {self.root}")
+        headers = [cell.value for cell in sheet[6]][1:]
+        self.assertEqual(headers, ["Row number", "Level 1", "Level 2", "Leaf depth", "Name without extension",
+                                  "File name", "Extension", "Size A (MiB)", "Size B (MiB)",
+                                  "Status", "Added", "Deleted", "Changed", "last"])
+        records = {row[headers.index("File name")]: dict(zip(headers, row))
+                   for row in sheet.iter_rows(min_row=7, min_col=2, values_only=True)}
+        changed = records["данные.tar.gz"]
+        self.assertEqual((changed["Level 1"], changed["Level 2"], changed["Leaf depth"]),
+                         ("nested", "данные.tar.gz", 2))
+        self.assertEqual((changed["Name without extension"], changed["Extension"]), ("данные.tar", "gz"))
+        expected = {"данные.tar.gz": (6, 1_234_567, "Changed", None, None, 1),
+                    "deleted.pdf": (7, None, "Deleted", None, 1, None),
+                    "zero": (None, 0, "Added", 1, None, None),
+                    ".gitignore": (0, 0, "Unchanged", None, None, None)}
+        for name, (size_a, size_b, status, added, deleted, changed) in expected.items():
+            record = records[name]
+            for label, size in (("Size A (MiB)", size_a), ("Size B (MiB)", size_b)):
+                if size is None:
+                    self.assertIsNone(record[label])
+                else:
+                    self.assertAlmostEqual(record[label], size / 1_048_576, delta=1e-14)
+            self.assertEqual((record["Status"], record["Added"], record["Deleted"], record["Changed"]),
+                             (status, added, deleted, changed))
+            self.assertEqual(record["last"], 1)
+        self.assertEqual(records[".gitignore"]["Name without extension"], ".gitignore")
+        self.assertEqual(records[".gitignore"]["Extension"], "")
 
     def test_failed_snapshot_preserves_previous_output(self):
         (self.root / "file.pdf").write_bytes(b"data")
@@ -144,6 +190,8 @@ class FolderChangeReviewTests(unittest.TestCase):
         book = load_workbook(self.work / "empty.xlsx")
         self.addCleanup(book.close)
         self.assertEqual(book["Changes"].max_row, 6)
+        self.assertEqual(book["Changes"]["B2"].value, f"Table: File changes in folder {other}")
+        self.assertEqual(book["Changes"]["B6"].value, "Row number")
 
     def test_invalid_and_duplicate_snapshot_records_are_rejected(self):
         (self.root / "file.txt").write_bytes(b"sample")

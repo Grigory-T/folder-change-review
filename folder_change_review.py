@@ -22,11 +22,12 @@ from runtime_safety import absolute, application_directory, extended, inside, of
 from state_store import read_container, write_container
 
 sys.dont_write_bytecode = True
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 SNAPSHOT_FORMAT = "folder-change-review.snapshot"
 EXCLUSIONS = ["~*", "Thumbs.db", "*.tmp", "*.temp"]
 MAX_DATA_ROWS = 1_048_570  # header row 6, data from row 7
 DEFAULT_WORKERS = 16
+HASH_BUFFER_SIZE = 256 * 1024
 
 
 def now() -> str:
@@ -59,15 +60,33 @@ def staged_output(output: str | Path):
 
 
 def hash_file(path: str) -> tuple[str, int]:
+    error = f"File changed while being hashed. Retry the snapshot: {path}"
     with open(extended(path), "rb") as stream:
         before = os.fstat(stream.fileno())
-        digest = hashlib.file_digest(stream, "sha256")
+        digest = hashlib.sha256()
+        remaining = before.st_size
+        buffer = bytearray(min(HASH_BUFFER_SIZE, remaining))
+        view = memoryview(buffer)
+        # Never chase a growing file to EOF. Read its initial size, then probe
+        # one byte for growth. A short positive read is valid, even over SMB.
+        while remaining:
+            count = stream.readinto(view[:min(len(view), remaining)])
+            if not count:
+                raise OSError(error)
+            digest.update(view[:count])
+            remaining -= count
+        grew = bool(stream.read(1))
         after = os.fstat(stream.fileno())
     current = os.stat(extended(path), follow_symlinks=False)
     def identity(info):
         return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
-    if identity(before) != identity(after) or identity(after) != identity(current):
-        raise OSError(f"File changed while being hashed. Retry the snapshot: {path}")
+    metadata_changed = before.st_ctime_ns != after.st_ctime_ns
+    # On Windows, fstat() can expose change time while stat() exposes creation
+    # time as ctime. Compare ctime only through the same API there.
+    if os.name != "nt":
+        metadata_changed |= after.st_ctime_ns != current.st_ctime_ns
+    if grew or metadata_changed or identity(before) != identity(after) or identity(after) != identity(current):
+        raise OSError(error)
     return digest.hexdigest(), after.st_size
 
 
@@ -235,9 +254,9 @@ def write_report(rows: list[dict], output: str | Path, root_hint: str = "") -> N
         raise ValueError(f"Union has {len(rows):,} files; one worksheet allows {MAX_DATA_ROWS:,} data rows.")
     ancestor, paths = report_hierarchy(rows, root_hint)
     depth = max((len(parts) for parts in paths), default=1)
-    fields = ["Уровень листа", "Имя файла", "Расширение", "Полное имя файла", "Статус",
-              "Добавлен", "Удалён", "Изменён", "Размер A, МБ", "Размер B, МБ"]
-    headers = ["№пп", *[f"Уровень {index}" for index in range(1, depth + 1)], *fields, "last"]
+    fields = ["Leaf depth", "Name without extension", "File name", "Extension",
+              "Size A (MiB)", "Size B (MiB)", "Status", "Added", "Deleted", "Changed"]
+    headers = ["Row number", *[f"Level {index}" for index in range(1, depth + 1)], *fields, "last"]
     if len(headers) + 1 > 16_384:  # column A is blank
         raise ValueError("Folder hierarchy exceeds Excel's column limit.")
     with staged_output(output) as temporary:
@@ -270,13 +289,13 @@ def write_report(rows: list[dict], output: str | Path, root_hint: str = "") -> N
             header = workbook.add_format({**header_format, "bg_color": "#00B0F0"})
             boundary = workbook.add_format({**header_format, "bg_color": "#000000", "font_color": "#FFFFFF"})
             sheet.set_column(0, 0, 5.81640625 - 5 / 7)
-            widths = {"Имя файла": 20, "Полное имя файла": 24}
+            widths = {"Row number": 9, "Name without extension": 20, "File name": 24}
             for column, text in enumerate(headers, 1):
-                width = 5.81640625 if column in (1, len(headers)) else widths.get(text, 12.54296875)
+                width = widths.get(text, 5.81640625 if column in (1, len(headers)) else 12.54296875)
                 sheet.set_column(column, column, width - 5 / 7)
             # Match the accepted Folder Review layout, including its taller header.
             sheet.set_row(5, 72)
-            sheet.write_string(1, 1, f"Таблица: Обзор изменений файлов папки {ancestor or root_hint}", title)
+            sheet.write_string(1, 1, f"Table: File changes in folder {ancestor or root_hint}", title)
             for column, text in enumerate(headers, 1):
                 sheet.write_number(3, column, column, centered)
             for column, text in enumerate(headers, 1):
@@ -284,14 +303,14 @@ def write_report(rows: list[dict], output: str | Path, root_hint: str = "") -> N
             for index, row in enumerate(rows, 1):
                 parts = paths[index - 1]
                 values = [index, *parts, *([None] * (depth - len(parts))), len(parts),
-                          ntpath.splitext(row["FileName"])[0], row["Extension"], row["FileName"], row["Status"],
-                          row["Added"], row["Deleted"], row["Changed"],
+                          ntpath.splitext(row["FileName"])[0], row["FileName"], row["Extension"],
                           None if row["SizeA"] is None else row["SizeA"] / (1024 * 1024),
-                          None if row["SizeB"] is None else row["SizeB"] / (1024 * 1024), 1]
+                          None if row["SizeB"] is None else row["SizeB"] / (1024 * 1024),
+                          row["Status"], row["Added"], row["Deleted"], row["Changed"], 1]
                 for column, value in enumerate(values, 1):
                     label = headers[column - 1]
-                    fmt = size_format if label.startswith("Размер") else centered if label in (
-                        "№пп", "last", "Уровень листа", "Расширение", "Статус", "Добавлен", "Удалён", "Изменён"
+                    fmt = size_format if label in ("Size A (MiB)", "Size B (MiB)") else centered if label in (
+                        "Row number", "last", "Leaf depth", "Extension", "Status", "Added", "Deleted", "Changed"
                     ) else body
                     if isinstance(value, str):
                         result = sheet.write_string(index + 5, column, value, fmt)
