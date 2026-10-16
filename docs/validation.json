@@ -1,0 +1,157 @@
+{
+  "version": "0.3.0",
+  "date": "2026-10-17",
+  "platform": "Windows 11 x86-64",
+  "python": "3.13.14",
+  "pyinstaller": "6.22.0",
+  "xlsxwriter": "3.2.9",
+  "unit_tests": {
+    "Linux": 17,
+    "Windows": 17
+  },
+  "exe_bytes": 12096474,
+  "exe_sha256": "c5311c507e1c342c2758b3e00e809bceff95254f179ed2501652f20808c2c234",
+  "embedded_project_code_matches_source": true,
+  "embedded_code_filenames_relative": 389,
+  "privacy_payloads_checked": 1347,
+  "private_validation_data_published": false,
+  "application_sources_sha256": {
+    "folder_change_review.py": "107c4e634703e996408b4030dd21e07a12ef1de55ea94af8c99458635926649d",
+    "folder_change_review_ui.py": "ee1891d4ef0f17b284146d66c48936345d4b75f096ccb3079b4514c4b98f1744",
+    "runtime_safety.py": "c25169e4ff28ce4cd104951f757efc9a4cfae3cd9cadd75056baee463366181a",
+    "state_store.py": "888bd96df75e1f8ba844b0da4cff60e8b8123c626191b6a3eecced5d976af821"
+  },
+  "smb": {
+    "dataset": "synthetic",
+    "storage": "SMB",
+    "files": 5000,
+    "captures": [
+      {
+        "delivery": "Python",
+        "workers": 16,
+        "seconds": 7.362
+      },
+      {
+        "delivery": "EXE",
+        "workers": 16,
+        "seconds": 8.54,
+        "scan_hash_seconds": 7.173
+      },
+      {
+        "delivery": "EXE",
+        "workers": 32,
+        "seconds": 6.657,
+        "scan_hash_seconds": 5.455
+      },
+      {
+        "delivery": "EXE",
+        "workers": 16,
+        "seconds": 8.73,
+        "scan_hash_seconds": 7.413
+      },
+      {
+        "delivery": "EXE",
+        "workers": 32,
+        "seconds": 7.002,
+        "scan_hash_seconds": 5.663
+      }
+    ],
+    "bytes": 327698890,
+    "state_bytes": 239690,
+    "legacy_json_bytes": 1367153,
+    "compare_export_seconds": 1.811,
+    "counts": {
+      "Changed": 1,
+      "Unchanged": 4997,
+      "Deleted": 2,
+      "Added": 2
+    },
+    "source_exe_records_equal": true,
+    "compare_without_source": true,
+    "input_write_rejected": true
+  },
+  "excel": {
+    "normal_excel_open": true,
+    "rows": 5002,
+    "plain_data_format": true,
+    "pivot_sums": {
+      "Добавлен": 2,
+      "Удалён": 2,
+      "Изменён": 1,
+      "last": 5002
+    },
+    "changed_file_drilldown": true,
+    "open_seconds": 0.23,
+    "pivot_seconds": 0.449
+  },
+  "sharing_violation": {
+    "locked_file_aborts": true,
+    "previous_state_preserved": true,
+    "staging_cleaned": true,
+    "retry_after_unlock_succeeds": true
+  },
+  "gui": {
+    "gui_create_two_states": true,
+    "gui_choose_nondefault_states": true,
+    "report_beside_exe": true,
+    "application_tcp_connections": 0,
+    "excel_normal_open": true,
+    "pivot_counts": {
+      "Добавлен": 2.0,
+      "Удалён": 2.0,
+      "Изменён": 1.0,
+      "last": 6.0
+    },
+    "report_unchanged": true
+  },
+  "final_exe_local_smoke": {
+    "dataset": "synthetic",
+    "storage": "local",
+    "files": 100,
+    "captures": [
+      {
+        "delivery": "Python",
+        "workers": 16,
+        "seconds": 0.083
+      },
+      {
+        "delivery": "EXE",
+        "workers": 16,
+        "seconds": 1.203,
+        "scan_hash_seconds": 0.023
+      },
+      {
+        "delivery": "EXE",
+        "workers": 32,
+        "seconds": 1.077,
+        "scan_hash_seconds": 0.022
+      },
+      {
+        "delivery": "EXE",
+        "workers": 16,
+        "seconds": 1.08,
+        "scan_hash_seconds": 0.023
+      },
+      {
+        "delivery": "EXE",
+        "workers": 32,
+        "seconds": 1.128,
+        "scan_hash_seconds": 0.022
+      }
+    ],
+    "bytes": 6553790,
+    "state_bytes": 5567,
+    "legacy_json_bytes": 31153,
+    "compare_export_seconds": 1.155,
+    "counts": {
+      "Changed": 1,
+      "Unchanged": 97,
+      "Deleted": 2,
+      "Added": 2
+    },
+    "source_exe_records_equal": true,
+    "compare_without_source": true,
+    "input_write_rejected": true
+  },
+  "byte_identical_clean_rebuild": true
+}

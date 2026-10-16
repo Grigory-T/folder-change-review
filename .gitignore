@@ -1,0 +1,14 @@
+.venv/
+.build-venv/
+.build/
+build/
+dist/
+evidence/
+__pycache__/
+*.spec
+.states/
+*.fcrstate
+*.xlsx
+*.log
+!windows_build/folder-change-review.spec
+.build-runtime.txt

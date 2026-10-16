@@ -1,0 +1,12 @@
+[project]
+name = "folder-change-review"
+version = "0.3.0"
+description = "Manual SHA-256 folder snapshots and a plain Excel change report."
+requires-python = ">=3.11"
+dependencies = ["xlsxwriter==3.2.9"]
+
+[dependency-groups]
+test = ["openpyxl==3.1.5"]
+
+[tool.uv]
+package = false
