@@ -1,0 +1,85 @@
+{
+  "LICENSE.bzip2.txt": {
+    "sha256": "bd5628cc76fb0ebf9c657d1dd4d1a240a1a7b216c31663e7bbf1131c0b70a910",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.13.16%2B20261013-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+    "archive_sha256": "784db2d7087fbecf1e0b807f908f2846de039e107e4195736039c8a217884b46",
+    "member": "python/licenses/LICENSE.bzip2.txt"
+  },
+  "LICENSE.cpython.txt": {
+    "sha256": "8fe98bf9822926d854f56ffd8d97877d8b942617aa44eb7ea77fd99e22f2537e",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.13.16%2B20261013-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+    "archive_sha256": "784db2d7087fbecf1e0b807f908f2846de039e107e4195736039c8a217884b46",
+    "member": "python/licenses/LICENSE.cpython.txt"
+  },
+  "LICENSE.expat.txt": {
+    "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+    "url": "https://raw.githubusercontent.com/libexpat/libexpat/R_2_8_5/expat/COPYING"
+  },
+  "LICENSE.hacl.txt": {
+    "sha256": "998ce04fb8ad9dedb0bc1b44938f8c3dcf1089780fa105ce1c8c30fb5554d78c",
+    "url": "https://raw.githubusercontent.com/python/cpython/v3.13.16/Modules/_hacl/Hacl_Hash_SHA2.c",
+    "selection": "Complete leading license comment, verbatim"
+  },
+  "LICENSE.libffi.txt": {
+    "sha256": "2c9c2acb9743e6b007b91350475308aee44691d96aa20eacef8e199988c8c388",
+    "url": "https://raw.githubusercontent.com/libffi/libffi/v3.4.4/LICENSE"
+  },
+  "LICENSE.liblzma.txt": {
+    "sha256": "bcb02973ef6e87ea73d331b3a80df7748407f17efdb784b61b47e0e610d3bb5c",
+    "url": "https://raw.githubusercontent.com/tukaani-project/xz/v5.2.5/COPYING"
+  },
+  "LICENSE.mimalloc.txt": {
+    "sha256": "19c99805e7a44a34b297a75d1edea9985e300066dfc024d5c99d4236d4573b5d",
+    "url": "https://raw.githubusercontent.com/microsoft/mimalloc/v2.1.7/LICENSE"
+  },
+  "LICENSE.mpdecimal.txt": {
+    "sha256": "b07528d8b1dbf1e2d2741052996f0876e23342ce2d30d0effa39c5457716c25a",
+    "url": "https://raw.githubusercontent.com/python/cpython/v3.13.16/Modules/_decimal/libmpdec/mpdecimal.c",
+    "selection": "Complete leading notice comment, verbatim"
+  },
+  "LICENSE.openssl-3.txt": {
+    "sha256": "ed72ce2b51ee58f117e5a021e2e04af158857f40269fbc03491f0b2a99dbcc96",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.13.16%2B20261013-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+    "archive_sha256": "784db2d7087fbecf1e0b807f908f2846de039e107e4195736039c8a217884b46",
+    "member": "python/licenses/LICENSE.openssl-3.txt"
+  },
+  "LICENSE.pyinstaller.txt": {
+    "sha256": "0598064c7d2718e38d7914a7d08343b2fa008e3bea9ebba2aa7a6ffa5900dd64",
+    "url": "https://raw.githubusercontent.com/pyinstaller/pyinstaller/v6.22.3/COPYING.txt"
+  },
+  "LICENSE.python-distribution.txt": {
+    "sha256": "76900732e5f075b725f754000ad5cab1b2cf89e355c1570138476956b6413cd3",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.13.16%2B20261013-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "archive_sha256": "7aba3985d4cee1c7cacb963ca6aa08a5d3e695d7f9609d9fabc56f22ddcf5a06",
+    "member": "python/LICENSE.txt"
+  },
+  "LICENSE.tcl.txt": {
+    "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16",
+    "url": "https://raw.githubusercontent.com/python/cpython-source-deps/tcl-core-8.6.15.0/license.terms"
+  },
+  "LICENSE.tk.txt": {
+    "sha256": "0d1e4405f6273f091732764ed89b57066be63ce64869be6c71ea337dc4f2f9b5",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.13.16%2B20261013-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "archive_sha256": "7aba3985d4cee1c7cacb963ca6aa08a5d3e695d7f9609d9fabc56f22ddcf5a06",
+    "member": "python/tcl/tk8.6/license.terms"
+  },
+  "LICENSE.visual-c-runtime.txt": {
+    "sha256": "3c71b3ae243121f6f227374cd1ef7c59ed07b1969b330d0e947f91a3a1b3fd73",
+    "url": "https://raw.githubusercontent.com/python/cpython/v3.13.16/PC/crtlicense.txt"
+  },
+  "LICENSE.xlsxwriter.txt": {
+    "sha256": "cf08b60a4ded986b58a617cb8304373bda5c4eff42fb4e30d7597b616e116e87",
+    "url": "https://raw.githubusercontent.com/jmcnamara/XlsxWriter/RELEASE_3.2.9/LICENSE.txt"
+  },
+  "LICENSE.zlib.txt": {
+    "sha256": "365e36720db366054863235aea5d6f440142ab968834bfaf81fa9d187c99b9b8",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.13.16%2B20261013-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+    "archive_sha256": "784db2d7087fbecf1e0b807f908f2846de039e107e4195736039c8a217884b46",
+    "member": "python/licenses/LICENSE.zlib.txt"
+  },
+  "NOTICE.openssl.txt": {
+    "sha256": "49480295043318cd38a03340b7942152ffe05e31d05ad5138a2896cbbc9ac150",
+    "url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.9/crypto/evp/digest.c",
+    "selection": "Complete leading notice comment, verbatim"
+  }
+}

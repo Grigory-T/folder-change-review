@@ -1,135 +1,120 @@
-# v0.6.0 validation
+# v0.7.0 finalization validation
 
-The [machine-readable receipt](validation.json) contains aggregate results and
-checksums. Private inventories, paths, screenshots and raw logs are excluded from
-source and releases. Tested target: Windows 11 x86-64. Windows 10 remains untested.
+[Aggregate receipt](validation.json) · [security receipt](security-audit.json) ·
+[complete component inventory](components.json) · [build instructions](build.md).
+Private project paths, inventories, screenshots and raw logs are excluded.
+Validated target: Windows 11 x86-64; Windows 10 remains untested.
 
-## Approved changes
+## Final changes
 
-- Sizes follow Folder Review: numeric bytes and MiB for A, B and B − A. Bytes
-  display `#,##0`; MiB display `#,##0.000`, retaining full numeric precision.
-  Known absence is zero for delta; Unknown rows have blank delta. Equal-length
-  edits remain Changed through internal SHA-256, independently of size.
-- Fixed `folder-change-review.xlsx`, atomic replacement and useful Excel-lock
-  messages. Failed saves preserve the previous report and remove staging.
-- Main columns width 5, zoom 70%, freeze rows 1–6 at A7 without frozen columns.
-  Existing hierarchy/name/status order, LCA title, white body, numeric 1/blank
-  flags and `last=1` remain. No native Table, saved pivot or hash column.
-- Read issues shows A/B roots once and relative paths. Conversion is lexical:
-  offline comparison never resolves or contacts the original source.
-- Matching surrounding single/double quotes are removed at user-input boundaries;
-  internal filenames retain literal whitespace and quote characters.
-- A separate development-only frozen runner executes the entire unit/Tk suite.
-  Production excludes its reader and test dependencies.
+- CPython updated to security release **3.13.16**, with **OpenSSL 3.5.9**;
+  PyInstaller updated to **6.22.3**. XlsxWriter remains 3.2.9.
+- Production build extracts a fresh checksum-pinned Python distribution instead
+  of depending on an installed Python/uv. Build wheels are version/hash locked.
+  `.gitattributes` preserves exact bytes across checkout line-ending settings.
+- Complete retained third-party notices and provenance are in the source and
+  EXE, including Python's incorporated libraries and Microsoft runtime conditions.
+  Application MIT licensing and upstream Folder Review attribution remain.
+- Unused XML parser/Expat excluded from production after upstream advisory review.
+  The development test runner retains its own reader dependencies.
+- Managed states/settings now always use the local machine cache, outside the
+  project. Legacy local history is read at startup and copied in background on the
+  next operation; original states/settings remain untouched. Source metadata
+  enumeration stays lightweight.
+- State output must end in `.fcrstate` and be outside the inspected tree. Only
+  the selected report and its staging file are project write exceptions.
+  Network/process blocking and project mutation boundaries gain behavioral tests.
+- Plain Excel layout, size/delta fields, worker choices, coverage/Unknown handling,
+  artifact exclusions and flexible in-project/SMB placement remain unchanged.
+  State format remains 4, with formats 1–3 readable; v0.6 also reads new states.
 
-## Flexible placement and safeguards
+## Automated and native acceptance
 
-The EXE and reports may be inside the inspected project or on SMB. A report-folder
-chooser supports another local or SMB destination. States/settings remain local:
-`.states` beside a local EXE, or a per-application-folder cache under local user
-application data for an SMB EXE. The unpacked runtime and processing workspace
-remain local and outside the inspected tree. Comparison only needs saved states.
-
-Only selected outputs and their exact staging paths are write exceptions inside
-an inspected tree. Other project content remains read-only to the application.
-Output-file symlinks are rejected; directory junction parents and mapped drives
-are supported. These are application safeguards, not an OS security sandbox.
-
-Captures and comparisons of legacy states exclude `.states` subtrees,
-`*.fcrstate`, the standard tool EXE/report names and legacy timestamped reports,
-preventing tool activity from becoming project changes. New states use format 4;
-formats 1–3 remain readable. Older EXEs reject format 4 rather than silently
-applying incompatible artifact rules. A directory named `scratch.tmp` is still
-traversed, and an unreadable such directory still contributes Unknown coverage.
-
-SMB servers must grant Execute permission to launch an EXE from a share. A real
-read/write-only data share rejected launch with Windows error 5 before the
-application started; SMB project/report operations with a local EXE still passed.
-A separate disposable test EXE with Execute permission launched from SMB, used
-local history and saved its default report to SMB. Only that fixture's Execute
-bits were adjusted; server configuration and unrelated permissions were unchanged.
-The application never changes permissions or elevates itself.
-
-## Automated and native checks
-
-**70 tests passed with zero skips on Linux/Xvfb, Windows source and the frozen
-Windows runner**: 56 core and 14 real Tk tests. Coverage includes size precision,
-positive/negative/zero/Unknown deltas, equal-length edits, artifact exclusions,
-legacy states, exact output exceptions, in-project rollback, SMB history routing,
-quote handling, operation concurrency and GUI report selection/lock recovery.
-Existing bounded hashing, coverage scopes, corruption, disk-full and UI cases pass.
+**75 tests each, zero failures/errors/skips** on Linux/Xvfb (Python 3.14.7),
+Windows source and a separate frozen Windows runner (Python 3.13.16): 61 core and
+14 real Tk tests. New security cases exercise real blocked socket/DNS/HTTP and
+process APIs, file mutation rejection, document SHA preservation across capture/
+report, local workspace separation rejection of a document/in-project state output, read-only legacy import and
+legacy-copy failure recovery.
+Existing bounded hashing, partial coverage, size precision, rollback, corruption,
+legacy, path/alias and GUI cases continue to pass.
 
 **13 source/production-EXE scenarios** match file records and every workbook ZIP
 member, normalizing only workbook timestamps. **Seven fatal failure cases** match
-exit codes, output preservation and cleanup. Previous-release states are readable;
-the previous EXE rejects current states.
+exit codes, preservation and cleanup. v0.6 states are readable, and its EXE can
+read format-4 states from v0.7. Older incompatible-format rejection remains
+covered by source/frozen tests and prior release receipts.
 
-**Ten native recovery assertions** pass in an unelevated Windows session:
-exclusive locks at 16/32 workers, complete unlock retry, ACL-denied subtree
-Unknown, restored-fixture-ACL retry, denied-root rollback, locked-state rollback,
-locked-report rollback, report retry, excluded locked Office files and staging
-cleanup. ACL changes affect only disposable fixtures and are restored. Unreadable
-files/subtrees never silently become Added/Deleted/Changed; source-root failure
-still aborts capture.
+**Ten native unelevated recovery assertions** pass: locks at 16/32 workers, unlock
+retry, denied subtree/Unknown, restored fixture ACL retry, denied-root rollback,
+locked-state rollback, locked-report rollback/retry, excluded locked Office files
+and staging cleanup. Fixture ACLs are restored; production never changes ACLs.
 
-Native placement checks pass for EXE/history/report inside a project, repeated
-capture exclusion, fixed-name overwrite, real input/output/history paths over
-260 characters, a directory-junction report alias and source-offline comparison.
-The long-path test launches the EXE from a short path; it does not establish that
-Windows can launch an EXE whose own pathname exceeds 260 characters. SMB source/
-report parity, local history and rejection of SMB state output also pass.
+Native placement passes inside a project, long input/output/history paths over
+260 characters, a real directory junction, fixed-name overwrite, source-offline
+comparison and SMB source/report parity. The long-path test launches the EXE from
+a short path; EXE launch paths over 260 are not established. SMB history/workspaces
+stay local. An SMB data share without Execute rejects EXE launch before startup;
+a separate own disposable EXE with Execute launches from SMB and saves its default
+report there. No server configuration or unrelated permissions changed; fixtures
+and local fixture history were removed.
 
-The production GUI runs inside its inspected project, captures complete and
-partial states, selects a nondefault A/B pair, displays read issues and overwrites
-the fixed report. Native Excel verifies ordinary and Unknown pivots/drill-down.
-No application TCP connections were observed. Idle/progress and footer alignment
-were visually inspected.
+The final production GUI captures complete/partial states inside its project,
+selects older A/B states, shows read issues and overwrites the fixed report.
+Native Excel verifies complete and Unknown pivots/drill-down. No application TCP
+connections were observed. Layout/idle-state screenshots were visually reviewed.
 
-## Full Desktop and Excel
+## Full Desktop and native Excel
 
-Two final production-EXE captures, without administrator rights, each read
-**83,204 files / 17.228 GB**, with **seven read issues**. Capture timings were
-**20.069 s at 16 workers** and **20.198 s at 32**, including loading the resulting
-state. Only a new disposable Desktop fixture was edited and removed; existing
-Desktop content was read-only.
+Final unelevated Desktop captures each read **83,204 files / 17.228 GB**, with
+**seven read issues**: **20.502 s at 16 workers**, **21.819 s at 32**, including
+loading the resulting state. Only a new disposable fixture was edited/removed;
+existing Desktop content remained read-only.
 
-The union has **83,206 rows: 2 Added, 2 Deleted, 1 Changed and 83,201 Unchanged**,
-with **+10 bytes net delta** and no incidental changes. Comparison/export took
-**23.096 s**. Both captures could not enumerate the same seven branches: no
-filenames can be invented there, so Unknown file rows are zero, while the warning
-and 14 A/B read-issue rows remain explicit.
+Union: **83,206 rows — 2 Added, 2 Deleted, 1 Changed, 83,201 Unchanged**, net
+**+10 bytes**, no incidental changes. Compare/export: **22.523 s**. Both captures
+could not enumerate the same branches, so Unknown file rows are zero while the
+coverage warning and 14 A/B issue rows remain explicit.
 
-**Seven native Excel reports** opened normally: in-project, long-path, SMB report,
-SMB-launched EXE report, complete GUI, partial GUI and full Desktop. Checks cover
-plain data, literal text, numeric formats, frozen rows/zoom, flags, Unknown blank
-delta and pivot sums of both delta units. The Desktop workbook opened in
-**2.311 s**; pivot checks took **0.974 s** and matched all counts and +10 bytes.
-Read-only closure preserved report bytes.
+**Seven native Excel reports** open normally: in-project, long-path, SMB report,
+SMB-launched EXE report, complete GUI, partial GUI and full Desktop. Plain data,
+flags, size precision, zoom/freeze, Unknown blank delta and pivot sums of both
+delta units pass. Desktop open **2.076 s**, pivot checks **1.014 s**, correct
+counts and +10 bytes. Read-only closes preserve report bytes.
 
-Timings are observations with uncontrolled caches and concurrent validation,
-not a controlled performance comparison against previous releases. Hash workers
-remain default 16 with manual 32; queue size is bounded and reads are bounded by
-the initial file size. Windows still controls SMB I/O timeout behavior.
+Timings have uncontrolled caches/concurrent workloads and are observations, not
+a controlled performance comparison to previous versions.
 
-## Packaging and repetition
+## Supply-chain, privacy and reproduction
 
-The production single-file EXE is **12,121,687 bytes**, SHA-256
-`5028105a596a64bb392d601419adf9b5c3f016c43de149ed85e4390edadfa1bc`.
-Python 3.13.14, PyInstaller 6.22.0 and XlsxWriter 3.2.9 remain pinned. Embedded
-application code matches source; 390 code filenames are relative and 1,348
-payloads pass the private-token audit. A clean repeat build is byte-identical.
-The test EXE is not published or included in production.
+Final EXE: **11,954,673 bytes**, SHA-256
+`fa1037adea2846404a4e34db94fa5996f382cb849c2409600ac2d60160f39a64`.
+Two clean builds in separate directories produce identical EXEs. Embedded project
+bytecode matches source; code filenames are relative. All **23 DLL/PYD payloads**
+match the verified Python distribution; payload/module/library/build-input hashes
+and native import names are published in `components.json`. This reproduces
+packaging from pinned upstream binaries, not recompilation of those binaries or
+an independent cross-machine build.
 
-Use the README unit command with Xvfb for headless Tk. On Windows build production
-with `BUILD-EXE.bat`, then the development runner with `BUILD-TEST-EXE.bat`:
+`pip-audit 2.10.1` checks **11 runtime/build/test Python packages** against PyPI
+advisories, with no listed vulnerabilities. Microsoft Defender custom scan finds
+no threats in the exact final EXE, with definitions `1.461.67.0`; its timestamp
+and checksum are in the security receipt. No external upload was requested.
+These checks cannot prove permanent absence of every vulnerability or malware.
+The EXE is unsigned; users can verify hashes, inspect source and reproduce it.
 
-```powershell
-.\dist\folder-change-review-tests.exe --results C:\Review\frozen-suite.json
-.\.venv\Scripts\python.exe windows_build\verify.py --exe C:\Review\folder-change-review.exe --results C:\Review\Parity
-```
+Public history before finalization: **77 file blobs** checked, no private-token
+matches. All five previously published EXEs plus the final EXE: **8,087 payloads**
+checked, no private-token matches. Final EXE contributes 1,349 payloads. Final
+source/docs receive a separate private-token/credential-pattern check. Public
+issues/PRs and Actions artifacts are empty. Required upstream copyright names
+remain in license notices; private project names/paths/wiki facts do not.
 
-Run `tests/windows_failure_acceptance.py` without elevation for real normal-user
-ACL denials. `tests/windows_placement_acceptance.py` uses disposable local/share
-fixtures; it never changes share permissions. Native Excel checks require a
-separate pywin32 test installation and interactive desktop. The tool needs
-neither Excel nor pywin32 to create reports.
+See [SECURITY.md](../SECURITY.md) for the supported boundaries: offline local
+execution, SMB filesystem access and explicitly selected output exceptions.
+Application safeguards are not an OS firewall or sandbox.
+
+The Downloads EXE checksum is verified. Real legacy history was copied into the
+local cache; original bytes/mtimes and preferences were verified unchanged. The
+existing Downloads workbook was open and was preserved. The final Desktop test
+workbook remains available in the private Windows validation folder.

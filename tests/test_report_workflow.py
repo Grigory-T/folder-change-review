@@ -16,8 +16,10 @@ class ReportWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.base=Path(self.temp.name);self.root=self.base/'Project';self.root.mkdir()
+        environment=patch.dict(os.environ,{'LOCALAPPDATA':str(self.base/'MachineData')})
+        environment.start();self.addCleanup(environment.stop)
     def capture(self,name):
-        with contextlib.redirect_stdout(io.StringIO()):return app.create_snapshot(self.root,self.root/(name+'.fcrstate'),32)
+        with contextlib.redirect_stdout(io.StringIO()):return app.create_snapshot(self.root,self.base/(name+'.fcrstate'),32)
     def test_size_arithmetic_and_formats_cover_zero_negative_and_equal_length_edits(self):
         for name,data in [('grow.pdf',b'a'),('delete.pdf',b'123'),('same.docx',b'ab'),('stable',b'')]:
             (self.root/name).write_bytes(data)
@@ -28,7 +30,7 @@ class ReportWorkflowTests(unittest.TestCase):
         expected={'grow.pdf':1048576,'delete.pdf':-3,'same.docx':0,'stable':0,'add.pdf':5}
         self.assertEqual({row['FileName']:row['SizeDelta'] for row in rows},expected)
         report=self.root/app.OUTPUT_FILE
-        with contextlib.redirect_stdout(io.StringIO()):app.compare_files(self.root/'A.fcrstate',self.root/'B.fcrstate',report)
+        with contextlib.redirect_stdout(io.StringIO()):app.compare_files(self.base/'A.fcrstate',self.base/'B.fcrstate',report)
         book=load_workbook(report);self.addCleanup(book.close);sheet=book['Changes']
         headers=[cell.value for cell in sheet[6]][1:]
         for row in sheet.iter_rows(min_row=7,min_col=2):
@@ -45,7 +47,7 @@ class ReportWorkflowTests(unittest.TestCase):
         self.assertFalse(list(self.root.glob('.folder-change-review-*')))
     def test_unknown_delta_is_blank_even_with_known_size_on_one_side(self):
         (self.root/'file.pdf').write_bytes(b'file');a=self.capture('A')
-        with patch.object(app,'hash_file',side_effect=PermissionError(13,'Denied')),contextlib.redirect_stdout(io.StringIO()):b=app.create_snapshot(self.root,self.root/'B.fcrstate',16)
+        with patch.object(app,'hash_file',side_effect=PermissionError(13,'Denied')),contextlib.redirect_stdout(io.StringIO()):b=app.create_snapshot(self.root,self.base/'B.fcrstate',16)
         row=app.compare_snapshots(a,b)[0]
         self.assertEqual(row['Status'],'Unknown');self.assertIsNone(row['SizeDelta'])
         self.assertEqual(row['SizeA'],4);self.assertIsNone(row['SizeB'])
@@ -78,9 +80,9 @@ class ReportWorkflowTests(unittest.TestCase):
     def test_fixed_default_cli_report_and_quoted_root(self):
         (self.root/'doc.pdf').write_bytes(b'doc');self.capture('A');self.capture('B')
         with patch.object(app,'application_directory',return_value=self.root),contextlib.redirect_stdout(io.StringIO()):
-            code=app.main(['compare','--before',str(self.root/'A.fcrstate'),'--after',str(self.root/'B.fcrstate')])
+            code=app.main(['compare','--before',str(self.base/'A.fcrstate'),'--after',str(self.base/'B.fcrstate')])
         self.assertEqual(code,0);self.assertTrue((self.root/app.OUTPUT_FILE).exists())
-        with contextlib.redirect_stdout(io.StringIO()):app.create_snapshot("'"+str(self.root)+"'",self.root/'quoted.fcrstate',1)
+        with contextlib.redirect_stdout(io.StringIO()):app.create_snapshot("'"+str(self.root)+"'",self.base/'quoted.fcrstate',1)
         for raw,expected in [(r'"\\server\share\a b"',r'\\server\share\a b'),(" 'C:\\A B' ",'C:\\A B'),('"unmatched','"unmatched')]:
             self.assertEqual(safety.pasted_path(raw),expected)
     def test_alias_output_and_relative_issue_paths_preserve_literal_names(self):
@@ -112,3 +114,35 @@ class ReportWorkflowTests(unittest.TestCase):
                 with safety.safe_operation((),self.base):pass
         self.assertIn('Close it in Excel',app.report_error_message(PermissionError(13,'locked')))
         self.assertFalse(safety._output_paths)
+
+    def test_local_tool_history_is_outside_project_and_legacy_import_is_read_only(self):
+        tool=self.root/'Tool';tool.mkdir();legacy=tool/'.states';legacy.mkdir()
+        (self.root/'document.pdf').write_bytes(b'original')
+        state=self.capture('A')
+        original=(self.base/'A.fcrstate').read_bytes()
+        old=legacy/'legacy.fcrstate';old.write_bytes(original)
+        settings=legacy/'settings.json';settings.write_text('{"workers":32}')
+        history=StateHistory(tool)
+        self.assertFalse(safety.inside(history.states,self.root))
+        self.assertEqual(history.settings()['workers'],32)
+        items,errors=history.list_states()
+        self.assertEqual([item['path'] for item in items],[old]);self.assertEqual(errors,[])
+        self.assertFalse(history.states.exists())  # startup reads metadata only
+        history.save_settings({'workers':16})
+        self.assertEqual(old.read_bytes(),original)
+        self.assertEqual(settings.read_text(),'{"workers":32}')
+        self.assertEqual((history.states/old.name).read_bytes(),original)
+        self.assertEqual(history.settings()['workers'],16)
+        self.assertEqual(len(history.list_states()[0]),1)
+        with contextlib.redirect_stdout(io.StringIO()):app.create_snapshot(self.root,history.new_state_path())
+        self.assertEqual(app.load_snapshot(history.list_states()[0][0]['path'])['files'],state['files'])
+
+    def test_legacy_copy_failure_keeps_original_history_usable(self):
+        tool=self.root/'Tool';(tool/'.states').mkdir(parents=True)
+        self.capture('A');old=tool/'.states'/'legacy.fcrstate'
+        old.write_bytes((self.base/'A.fcrstate').read_bytes())
+        history=StateHistory(tool)
+        with patch('state_store.shutil.copyfile',side_effect=PermissionError('Locked')):
+            history.save_settings({'workers':16})
+        self.assertEqual(history.list_states()[0][0]['path'],old)
+        self.assertFalse(list(history.states.glob('.folder-change-review-*')))

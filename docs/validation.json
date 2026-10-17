@@ -1,60 +1,57 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "date": "2026-10-17",
   "platform": "Windows 11 x86-64",
-  "python": "3.13.14",
-  "pyinstaller": "6.22.0",
-  "xlsxwriter": "3.2.9",
-  "unit_tests": {
-    "Linux_with_Xvfb": 70,
-    "Windows_source": 70,
+  "Linux_test_Python": "3.14.7",
+  "Windows_Python": "3.13.16",
+  "PyInstaller": "6.22.3",
+  "XlsxWriter": "3.2.9",
+  "tests": {
+    "Linux_Xvfb": {
+      "tests": 75,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "Windows_source": {
+      "tests": 75,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
     "Windows_frozen": {
-      "tests": 70,
+      "tests": 75,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "frozen_runtime": true
-    }
+    },
+    "core": 61,
+    "real_Tk": 14
   },
-  "core_tests": 56,
-  "real_Tk_workflow_tests": 14,
-  "exe_bytes": 12121687,
-  "exe_sha256": "5028105a596a64bb392d601419adf9b5c3f016c43de149ed85e4390edadfa1bc",
-  "embedded_project_code_matches_source": true,
-  "embedded_code_filenames_relative": 390,
-  "privacy_payloads_checked": 1348,
-  "private_validation_data_published": false,
+  "artifact": {
+    "name": "folder-change-review.exe",
+    "bytes": 11954673,
+    "sha256": "fa1037adea2846404a4e34db94fa5996f382cb849c2409600ac2d60160f39a64",
+    "authenticode_signed": false,
+    "imports": [
+      "ADVAPI32.dll",
+      "COMCTL32.dll",
+      "GDI32.dll",
+      "KERNEL32.dll",
+      "USER32.dll"
+    ]
+  },
+  "reproducibility": {
+    "separate_directory_rebuild_identical": true,
+    "sha256": "fa1037adea2846404a4e34db94fa5996f382cb849c2409600ac2d60160f39a64",
+    "exe_bytes": 11954673
+  },
   "state_format": 4,
-  "formats_1_to_3_readable": true,
-  "older_runtime_rejects_current_format": true,
-  "byte_identical_clean_rebuild": true,
-  "application_sources_sha256": {
-    "folder_change_review.py": "e9c571eebadeabc791d139bed577f47db91a41880ad60b9a23fd425003cf8bda",
-    "folder_change_review_ui.py": "55672ee6d8b26cbf45e13389888e67d6b1f4fe6fe2172fd79ac115633acd9766",
-    "runtime_safety.py": "a04f1c62ae83b37327d73648f19ef66fed531bc15a2a1b8a09d9cd040580d835",
-    "state_store.py": "5dd54ba743be6b783bada52eb00f6eed38cdf96b057ca986dbe66cec8f80c2cc"
-  },
-  "workbook": {
-    "filename": "folder-change-review.xlsx",
-    "main_column_width": 5,
-    "zoom_percent": 70,
-    "freeze": "A7",
-    "bytes_format": "#,##0",
-    "MiB_format": "#,##0.000",
-    "delta": "B minus A; known absence is zero; Unknown delta blank",
-    "plain_data": true,
-    "hash_column": false
-  },
-  "storage_policy": {
-    "EXE_inside_project_allowed": true,
-    "EXE_on_SMB_allowed_with_execute_permission": true,
-    "reports_inside_project_allowed": true,
-    "reports_on_SMB_allowed": true,
-    "history_and_processing_workspaces_local": true,
-    "selected_outputs_only_write_exceptions": true,
-    "reserved_artifacts_excluded_from_capture_and_legacy_comparison": true,
-    "no_runtime_internet": true
-  },
+  "formats_1_to_4_readable": true,
+  "source_bytecode_matches_artifact": true,
+  "private_final_EXE_payloads_checked": 1349,
+  "private_final_EXE_token_matches": 0,
   "parity": {
     "comparisons": [
       {
@@ -137,7 +134,8 @@
     ],
     "matching_failure_cases": 7,
     "only_workbook_timestamps_normalized": true,
-    "older_runtime_rejects_current_state_format": true
+    "older_runtime_rejects_current_state_format": false,
+    "previous_runtime_reads_current_state_format": true
   },
   "native_failure_recovery": {
     "exclusive_file_lock_partial_unknown_16_32": true,
@@ -159,6 +157,7 @@
         "files": 1,
         "source_exe_workbook_equal": true,
         "report_and_history_excluded": true,
+        "history_outside_project": true,
         "fixed_report_overwrite": true
       },
       {
@@ -167,6 +166,7 @@
         "files": 1,
         "source_exe_workbook_equal": true,
         "report_and_history_excluded": true,
+        "history_outside_project": true,
         "fixed_report_overwrite": true
       }
     ],
@@ -212,16 +212,16 @@
     "captures": [
       {
         "workers": 16,
-        "seconds": 20.069,
+        "seconds": 20.502,
         "files": 83204,
-        "bytes": 17228269102,
+        "bytes": 17228196863,
         "read_issues": 7
       },
       {
         "workers": 32,
-        "seconds": 20.198,
+        "seconds": 21.819,
         "files": 83204,
-        "bytes": 17228269112,
+        "bytes": 17228196873,
         "read_issues": 7
       }
     ],
@@ -239,7 +239,7 @@
       "Unchanged": 1
     },
     "controlled_delta_bytes": 10,
-    "compare_seconds": 23.096,
+    "compare_seconds": 22.523,
     "issue_rows": 14,
     "incidental_change_count": 0
   },
@@ -258,8 +258,26 @@
           "Size delta (MiB)": 5.7220458984375e-06
         },
         "changed_file_drilldown": false,
-        "open_seconds": 0.173,
-        "pivot_seconds": 0.429,
+        "open_seconds": 0.18,
+        "pivot_seconds": 0.332,
+        "unknown": 0,
+        "read_issues": 0
+      },
+      {
+        "normal_excel_open": true,
+        "rows": 1,
+        "plain_data_format": true,
+        "pivot_sums": {
+          "Added": null,
+          "Deleted": null,
+          "Changed": 1.0,
+          "last": 1.0,
+          "Size delta (bytes)": 6.0,
+          "Size delta (MiB)": 5.7220458984375e-06
+        },
+        "changed_file_drilldown": false,
+        "open_seconds": 0.167,
+        "pivot_seconds": 0.303,
         "unknown": 0,
         "read_issues": 0
       },
@@ -277,7 +295,7 @@
         },
         "changed_file_drilldown": false,
         "open_seconds": 0.166,
-        "pivot_seconds": 0.341,
+        "pivot_seconds": 0.325,
         "unknown": 0,
         "read_issues": 0
       },
@@ -294,26 +312,8 @@
           "Size delta (MiB)": 5.7220458984375e-06
         },
         "changed_file_drilldown": false,
-        "open_seconds": 0.162,
-        "pivot_seconds": 0.355,
-        "unknown": 0,
-        "read_issues": 0
-      },
-      {
-        "normal_excel_open": true,
-        "rows": 1,
-        "plain_data_format": true,
-        "pivot_sums": {
-          "Added": null,
-          "Deleted": null,
-          "Changed": 1.0,
-          "last": 1.0,
-          "Size delta (bytes)": 6.0,
-          "Size delta (MiB)": 5.7220458984375e-06
-        },
-        "changed_file_drilldown": false,
-        "open_seconds": 0.166,
-        "pivot_seconds": 0.428,
+        "open_seconds": 0.163,
+        "pivot_seconds": 0.33,
         "unknown": 0,
         "read_issues": 0
       },
@@ -330,8 +330,8 @@
           "Size delta (MiB)": -2.86102294921875e-06
         },
         "changed_file_drilldown": false,
-        "open_seconds": 0.183,
-        "pivot_seconds": 0.477,
+        "open_seconds": 0.168,
+        "pivot_seconds": 0.404,
         "unknown": 0,
         "read_issues": 0
       },
@@ -348,8 +348,8 @@
           "Size delta (MiB)": 0.0
         },
         "changed_file_drilldown": false,
-        "open_seconds": 0.164,
-        "pivot_seconds": 0.365,
+        "open_seconds": 0.17,
+        "pivot_seconds": 0.352,
         "unknown": 1,
         "read_issues": 1
       },
@@ -366,18 +366,25 @@
           "Size delta (MiB)": 9.5367431640625e-06
         },
         "changed_file_drilldown": false,
-        "open_seconds": 2.311,
-        "pivot_seconds": 0.974,
+        "open_seconds": 2.076,
+        "pivot_seconds": 1.014,
         "unknown": 0,
         "read_issues": 14
       }
     ]
   },
-  "timings_note": "Observations with uncontrolled caches and concurrent validation. Desktop capture timing includes loading the resulting state. Not a controlled regression benchmark.",
+  "timings_note": "Uncontrolled caches and concurrent workloads. Desktop captures include loading the resulting state; not a controlled regression benchmark.",
+  "component_inventory": "components.json",
+  "security_audit": "security-audit.json",
+  "relative_code_filenames": 372,
   "delivery": {
-    "Downloads_exe_checksum_verified": true,
-    "Downloads_report_checksum_verified": true,
-    "existing_state_history_preserved": true,
-    "report_sha256": "9840e824a3416422bd726f608e3fb9e572a752176471f1f2cddb4041ba3a54cc"
+    "exe_checksum_verified": true,
+    "report_replaced": false,
+    "exe_bytes": 11954673,
+    "existing_open_report_preserved": true,
+    "legacy_history_bytes_and_mtimes_preserved": true,
+    "legacy_states_copied_to_local_cache": true,
+    "settings_preserved": true,
+    "history_outside_project_by_default": true
   }
 }

@@ -1,0 +1,5 @@
+# Preserve exact checked-in bytes, including upstream license notices.
+# Reproducible packaging must not depend on a user's core.autocrlf setting.
+* -text
+# Upstream notices are retained verbatim, including CRLF and terminal blank lines.
+licenses/*.txt whitespace=-trailing-space,-blank-at-eof,cr-at-eol

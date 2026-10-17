@@ -98,7 +98,7 @@ def audit(event, args):
         raise PermissionError("Launching subprocesses is disabled.")
     if event in {"os.startfile", "os.startfile/2"}:
         if _open_folder is None or os.path.normcase(absolute(args[0])) != _open_folder:
-            raise PermissionError("Only the local application folder may be opened.")
+            raise PermissionError("Only the explicitly requested report folder may be opened.")
         return
 
     def protect(value, dir_fd=None):
@@ -175,9 +175,9 @@ def _safe_operation(roots, output_directory):
     with offline_runtime():
         _roots = roots
         try:
-            # Prefer the old local output workspace when outside input. SMB or
-            # in-project output always uses local processing storage elsewhere.
-            candidates = [absolute(output_directory)]
+            # Processing storage is independent of the selected report folder.
+            # Comparison must not resolve the saved source roots to choose it.
+            candidates = []
             try:
                 candidates.append(tempfile.gettempdir())
             except FileNotFoundError:

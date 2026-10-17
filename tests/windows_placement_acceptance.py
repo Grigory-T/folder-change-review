@@ -4,6 +4,7 @@ Only new UUID fixtures are created/changed/deleted, including on the supplied
 share. The application never launches these test harness subprocesses.
 """
 import argparse
+import contextlib
 import ctypes
 import hashlib
 import json
@@ -30,7 +31,7 @@ def main():
     result={'cases':[]}
     def run(exe,*arguments):
         return subprocess.run([extended(exe) if len(str(exe))>240 else str(exe),*map(str,arguments)],capture_output=True,timeout=180).returncode
-    with tempfile.TemporaryDirectory(prefix='placement-',dir=args.work) as temporary:
+    with tempfile.TemporaryDirectory(prefix='placement-',dir=args.work) as temporary, contextlib.ExitStack() as cleanup:
         base=Path(temporary)
         for long in (False,True):
             root=base/('Long' if long else 'Project')
@@ -40,9 +41,18 @@ def main():
             document=root/'Document-пример.pdf';Path(extended(document)).write_bytes(b'before')
             exe=root/'folder-change-review.exe';shutil.copyfile(args.exe,extended(exe))
             launcher=args.exe if long else exe
-            history=StateHistory(root);before=history.new_state_path();after=history.new_state_path()
+            history=StateHistory(root);cleanup.callback(shutil.rmtree,history.states.parent,True)
+            before=history.new_state_path();after=history.new_state_path()
+            if long:
+                state_folder=base/'LongStates'
+                for i in range(5):state_folder/=f'{i}-'+('long-state-path-'*5)
+                Path(extended(state_folder)).mkdir(parents=True)
+                before=state_folder/'A.fcrstate';after=state_folder/'B.fcrstate'
             assert run(launcher,'snapshot','--root','"'+str(root)+'"','--output',before,'--workers',32)==0
             a=app.load_snapshot(before);assert a['file_count']==1 and a['complete']
+            assert not app.inside(history.states,root)
+            assert run(launcher,'snapshot','--root',root,'--output',root/'rejected.fcrstate')==1
+            assert not Path(extended(root/'rejected.fcrstate')).exists()
             Path(extended(document)).write_bytes(b'after longer')
             assert run(launcher,'snapshot','--root',root,'--output',after,'--workers',16)==0
             # No --output: report belongs beside the relocated executable, not cwd.
@@ -58,7 +68,7 @@ def main():
             assert app.load_snapshot(latest)['files']==app.load_snapshot(after)['files']
             assert not list(Path(extended(root)).glob('.folder-change-review-*'))
             shutil.copyfile(extended(report),args.work/('long-path.xlsx' if long else 'inside-project.xlsx'))
-            result['cases'].append({'case':'long-path' if long else 'inside-project','path_over_260':len(str(report))>260,'files':1,'source_exe_workbook_equal':True,'report_and_history_excluded':True,'fixed_report_overwrite':True})
+            result['cases'].append({'case':'long-path' if long else 'inside-project','path_over_260':len(str(report))>260,'files':1,'source_exe_workbook_equal':True,'report_and_history_excluded':True,'history_outside_project':True,'fixed_report_overwrite':True})
         # A directory junction gives output another spelling of the same folder.
         project=base/'AliasProject';project.mkdir();(project/'file.pdf').write_bytes(b'file')
         a=base/'alias-A.fcrstate';b=base/'alias-B.fcrstate'

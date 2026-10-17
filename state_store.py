@@ -4,6 +4,7 @@ import json
 import hashlib
 import ntpath
 import os
+import shutil
 from pathlib import Path
 import uuid
 import zipfile
@@ -119,11 +120,11 @@ def validate_coverage(snapshot):
 class StateHistory:
     def __init__(self, directory):
         self.directory = Path(absolute(directory))
-        self.states = self.directory / ".states"
-        if not local_storage(self.directory):
-            cache = Path(os.environ.get("LOCALAPPDATA", Path.home()/".local"/"share")) / "FolderChangeReview" / "histories"
-            key = hashlib.sha256(os.path.normcase(str(self.directory)).encode("utf-8")).hexdigest()[:24]
-            self.states = cache / key / ".states"
+        cache = Path(os.environ.get("LOCALAPPDATA", Path.home()/".local"/"share")) / "FolderChangeReview" / "histories"
+        key = hashlib.sha256(os.path.normcase(str(self.directory)).encode("utf-8")).hexdigest()[:24]
+        self.states = cache / key / ".states"
+        self.legacy_states = self.directory / ".states" if local_storage(self.directory) else None
+        self.legacy_checked = False
         require_local(self.states)
 
     def ensure(self):
@@ -147,28 +148,60 @@ class StateHistory:
 
     def list_states(self):
         items, errors = [], []
-        if Path(extended(self.states)).exists():
-            for path in Path(extended(self.states)).glob("*" + EXTENSION):
+        seen = set()
+        for folder in (self.states, self.legacy_states):
+            if folder is None or not Path(extended(folder)).is_dir():
+                continue
+            for path in Path(extended(folder)).glob("*" + EXTENSION):
                 path = Path(absolute(path))
+                if path.name in seen:
+                    continue
                 try:
                     metadata = read_metadata(path)
                     items.append({"path": path, "metadata": metadata})
+                    seen.add(path.name)
                 except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:
                     errors.append(f"{path.name}: {error}")
         items.sort(key=lambda item: (item["metadata"]["completed_utc"], item["path"].name), reverse=True)
         return items, errors
 
     def settings(self):
-        try:
-            with open(extended(self.states / "settings.json"), encoding="utf-8") as stream:
-                value = json.load(stream)
-            return value if isinstance(value, dict) else {}
-        except (OSError, ValueError):
-            return {}
+        for folder in (self.states, self.legacy_states):
+            if folder is None:
+                continue
+            try:
+                with open(extended(folder / "settings.json"), encoding="utf-8") as stream:
+                    value = json.load(stream)
+                if isinstance(value, dict):
+                    return value
+            except (OSError, ValueError):
+                pass
+        return {}
+
+    def copy_legacy_states(self):
+        """Background, read-only import; startup still reads small metadata only."""
+        if self.legacy_checked or self.legacy_states is None:
+            return
+        from folder_change_review import staged_output
+        folder = Path(extended(self.legacy_states))
+        if folder.is_dir() and not folder.is_symlink():
+            for source in folder.glob("*" + EXTENSION):
+                target = self.states / source.name
+                if source.is_symlink() or Path(extended(target)).exists():
+                    continue
+                try:
+                    with staged_output(target) as temporary:
+                        shutil.copyfile(source, temporary)
+                except OSError:
+                    # Keep unreadable legacy entries visible in the read-only
+                    # history rather than losing them or aborting a new capture.
+                    continue
+        self.legacy_checked = True
 
     def save_settings(self, value):
         from folder_change_review import staged_output
         self.ensure()
+        self.copy_legacy_states()
         with staged_output(self.states / "settings.json") as temporary:
             with open(temporary, "w", encoding="utf-8") as stream:
                 json.dump(value, stream, ensure_ascii=False, separators=(",", ":"))

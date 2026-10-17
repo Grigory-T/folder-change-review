@@ -6,9 +6,8 @@ import os
 
 root = Path(SPECPATH).parent
 testing = os.environ.get("FOLDER_CHANGE_REVIEW_BUILD_TESTS") == "1"
-data = [(str(root / "LICENSE"), "licenses/project"),
-        (str(Path(sys.base_prefix) / "LICENSE.txt"), "licenses/python"),
-        (str(Path(sys.base_prefix) / "tcl/tk8.6/license.terms"), "licenses/tcl-tk")]
+data = [(str(root / "LICENSE"), "licenses/project")]
+data += [(str(file), "licenses/third-party") for file in sorted((root / "licenses").glob("*.txt"))]
 for package in ("xlsxwriter", "pyinstaller"):
     installed = distribution(package)
     for file in installed.files:
@@ -18,7 +17,7 @@ a = Analysis(
     [str(root / "windows_build" / ("test_entry.py" if testing else "entry.py"))],
     pathex=[str(root), str(root / "tests")], binaries=[],
     datas=data,
-    hiddenimports=[], excludes=["setuptools", "pkg_resources", "packaging"] + ([] if testing else ["openpyxl"]),
+    hiddenimports=[], excludes=["setuptools", "pkg_resources", "packaging"] + ([] if testing else ["openpyxl", "xml", "pyexpat", "_elementtree"]),
     optimize=0,
 )
 # Stable standard-library container order for repeatable builds.

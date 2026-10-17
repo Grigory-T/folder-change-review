@@ -24,7 +24,7 @@ from runtime_safety import absolute, application_directory, extended, inside, of
 from state_store import read_container, validate_coverage, write_container
 
 sys.dont_write_bytecode = True
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 OUTPUT_FILE = "folder-change-review.xlsx"
 SNAPSHOT_FORMAT = "folder-change-review.snapshot"
 EXCLUSIONS = ["~*", "Thumbs.db", "*.tmp", "*.temp", "*.fcrstate", ".states/", "folder-change-review.exe", OUTPUT_FILE,
@@ -188,7 +188,11 @@ def scan_files(root: str, stats: dict, issues: list):
 
 def create_snapshot(root: str | Path, output: str | Path, workers: int = DEFAULT_WORKERS, progress=None) -> dict:
     root = pasted_path(root)
+    if os.path.splitext(absolute(output))[1].lower() != ".fcrstate":
+        raise ValueError("State output must have an .fcrstate extension.")
     require_local(output)
+    if inside(output, root):
+        raise ValueError("State files must be saved outside the project folder. Only reports may be written inside it.")
     with safe_operation((root,), os.path.dirname(absolute(output))):
         return _create_snapshot(root, output, workers, progress)
 

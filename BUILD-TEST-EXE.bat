@@ -5,9 +5,7 @@ if not exist .build-venv\Scripts\python.exe (
   echo Run BUILD-EXE.bat first.
   exit /b 1
 )
-uv export --frozen --group test --no-emit-project --output-file .build-tests.txt
-if errorlevel 1 exit /b 1
-uv pip install --python .build-venv\Scripts\python.exe --require-hashes -r .build-tests.txt
+.build-venv\Scripts\python.exe -I -m pip install --disable-pip-version-check --no-input --only-binary=:all: --require-hashes -r windows_build\requirements-test.txt
 if errorlevel 1 exit /b 1
 set PYTHONHASHSEED=0
 set SOURCE_DATE_EPOCH=1767225600

@@ -27,7 +27,7 @@ The report-folder control stays visible. Long folder paths remain selectable
 and can be scrolled horizontally for inspection.
 
 Capture dates and file counts identify states in the chooser. State files and
-settings are managed automatically in a hidden `.states` folder beside a local EXE. For an EXE on SMB, history is kept locally under `%LOCALAPPDATA%\FolderChangeReview\histories`, separately for each application-folder spelling.
+settings are managed automatically under local `%LOCALAPPDATA%\FolderChangeReview\histories`, separately for each application-folder spelling, for both local and SMB EXEs. New states are always outside the inspected project. Legacy `.states` history beside a local EXE remains readable and is copied into the local cache during the next capture/report; originals remain untouched.
 Keep that folder to retain history. States are compressed technical files, not
 workbooks, and need no manual handling. They are not encrypted: keep your working
 folder somewhere appropriate for the project data.
@@ -97,15 +97,14 @@ the Windows machine and its unpacked runtime stays local. The SMB server must
 grant Execute permission to launch an EXE directly from a share. Read/write-only
 data shares can still hold projects and reports while the EXE runs locally.
 
-States and processing workspaces stay local. A local EXE uses its writable
-`.states` folder; an SMB EXE uses the local machine cache. Keep a consistent
-application path spelling to use the same cached history. Workspace selection
-never uses the inspected tree. The one-file runtime unpacks under local user
+States and processing workspaces stay local. Both local and SMB EXEs use the local machine cache. Keep a consistent
+application path spelling to use the same cached history. Capture workspace selection avoids the inspected tree; comparison uses local
+processing storage independently of the report folder and never resolves saved source roots. The one-file runtime unpacks under local user
 application data before Python starts.
 
-Only explicitly selected outputs and their atomic-save staging files are write
-exceptions inside a project. Other existing project files remain read-only to the
-application. Saving reports/history may change directory timestamps. Output file
+Only the selected Excel report and its atomic-save staging file are write
+exceptions inside a project. State output inside the project is rejected. Other existing project files remain read-only to the
+application. Saving a report may change its project directory timestamp; history uses the local machine cache. Output file
 symlinks are rejected; mapped drives and junction parents are supported.
 
 Reserved tool artifacts are omitted from captures and from comparisons of older
@@ -177,9 +176,13 @@ For real Tk workflow/layout tests on headless Linux, prefix this command with
 `xvfb-run -a`; UI tests skip if a display is unavailable.
 openpyxl is a test reader only.
 
-On Windows x86-64, `BUILD-EXE.bat` prepares Python 3.13.14 and hash-locked
-PyInstaller 6.22.0 build dependencies. It builds the windowed EXE in `dist`.
+On Windows x86-64, `BUILD-EXE.bat` verifies and extracts the exact pinned
+Python 3.13.16 archive, then installs hash-locked PyInstaller 6.22.3 wheels.
+It needs neither a global Python nor uv and builds the windowed EXE in `dist`.
 Building may download dependencies; the finished EXE does not.
+See [audit and reproducible build instructions](docs/build.md),
+[runtime/data boundaries](SECURITY.md) and [third-party notices](THIRD-PARTY-NOTICES.md).
+The unused XML parser and development reader are excluded from production.
 
 For scripted local testing, the same EXE also accepts:
 

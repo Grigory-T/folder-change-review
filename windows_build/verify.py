@@ -65,6 +65,7 @@ def main():
           'over.pdf':b'a'*(app.HASH_BUFFER_SIZE*2+16)+b'b'}, {'Changed':1,'Unchanged':3}),
         ('timestamp-only', {'same.pdf':b'content'}, {'same.pdf':b'content'}, {'Unchanged':1}),
     ]
+    previous_compatible = False
     comparisons = []
     with tempfile.TemporaryDirectory(prefix='fcr-parity-',dir=args.results) as temporary:
         base = Path(temporary)
@@ -117,8 +118,10 @@ def main():
             subprocess.run([str(args.exe),'compare','--before',str(previous),'--after',str(current),'--output',str(frozen_report)],check=True,timeout=60)
             assert normalized_workbook(source_report) == normalized_workbook(frozen_report)
             rejected = base/'old-runtime-must-not-export.xlsx'
-            assert subprocess.run([str(args.previous_exe),'compare','--before',str(current),'--after',str(current),'--output',str(rejected)],timeout=60).returncode == 1
-            assert not rejected.exists()
+            previous_compatible = app.load_snapshot(previous)['version'] == app.load_snapshot(current)['version']
+            code = subprocess.run([str(args.previous_exe),'compare','--before',str(current),'--after',str(current),'--output',str(rejected)],timeout=60).returncode
+            assert code == (0 if previous_compatible else 1)
+            assert rejected.exists() == previous_compatible
             comparisons.append({'case':'previous-release-state','rows':1,'all_workbook_members_equal':True})
         sentinel = base/'preserved.xlsx'; sentinel.write_bytes(b'previous output')
         broken = base/'broken.fcrstate'; broken.write_bytes(b'not a state')
@@ -139,7 +142,8 @@ def main():
         assert not (project/'inside.fcrstate').exists()
         assert not list(base.rglob('.folder-change-review-*'))
     result = {'comparisons':comparisons,'matching_failure_cases':len(failures),'only_workbook_timestamps_normalized':True,
-              'older_runtime_rejects_current_state_format': bool(args.previous_exe)}
+              'older_runtime_rejects_current_state_format': bool(args.previous_exe) and not previous_compatible,
+              'previous_runtime_reads_current_state_format': previous_compatible}
     (args.results/'parity.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     print(json.dumps(result,indent=2))
 

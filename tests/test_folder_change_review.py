@@ -22,6 +22,8 @@ class FolderChangeReviewTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.work = Path(self.temp.name)
+        environment = patch.dict(os.environ, {"LOCALAPPDATA": str(self.work/"MachineData")})
+        environment.start(); self.addCleanup(environment.stop)
         self.root = self.work / "project"
         self.root.mkdir()
 
@@ -178,10 +180,10 @@ class FolderChangeReviewTests(unittest.TestCase):
         self.assertEqual(output.read_bytes(), b"previous report")
         self.assertEqual(list(self.work.glob(".folder-change-review-*")), [])
 
-    def test_no_same_root_check_and_in_project_output_is_allowed(self):
-        with contextlib.redirect_stdout(io.StringIO()):
+    def test_no_same_root_check_and_in_project_state_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "outside"):
             app.create_snapshot(self.root, self.root / "A.fcrstate")
-        self.assertTrue((self.root / "A.fcrstate").exists())
+        self.assertFalse((self.root / "A.fcrstate").exists())
         before = self.snapshot("A.fcrstate")
         other = self.work / "different-project"
         other.mkdir()
@@ -327,7 +329,7 @@ class FolderChangeReviewTests(unittest.TestCase):
                 socket.socket()
             with self.assertRaises(PermissionError):
                 subprocess.Popen(["unused-command"])
-            self.assertTrue(app.inside(tempfile.gettempdir(), self.work))
+            self.assertFalse(app.inside(tempfile.gettempdir(), self.root))
         self.assertEqual(path.read_bytes(), b"original")
         self.assertEqual(list(self.work.glob(".folder-change-review-work-*")), [])
 

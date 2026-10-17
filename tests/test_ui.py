@@ -1,6 +1,7 @@
 """Real Tk workflow tests; use xvfb-run on a headless Linux host."""
 import contextlib
 import io
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -26,6 +27,8 @@ class DesktopWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.work = Path(self.temp.name)
+        environment = patch.dict(os.environ, {"LOCALAPPDATA": str(self.work/"MachineData")})
+        environment.start(); self.addCleanup(environment.stop)
         self.project = self.work/'Project'
         self.project.mkdir()
         self.directory = self.work/'Application'

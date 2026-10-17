@@ -46,7 +46,7 @@ def main():
             if name.endswith('.pyc'):
                 inspect(marshal.loads(standard.read(name)[16:]))
     assert 'tkinter' in pyz.toc and 'xlsxwriter' in pyz.toc
-    assert not any(name.split('.')[0] in ('openpyxl', 'setuptools', 'pkg_resources') for name in pyz.toc)
+    assert not any(name.split('.')[0] in ('openpyxl', 'setuptools', 'pkg_resources', 'xml', 'pyexpat', '_elementtree') for name in pyz.toc)
     print(json.dumps({'source_bytecode_equal': True, 'relative_code_filenames': len(filenames), 'exe_bytes': args.exe.stat().st_size, 'sha256': hashlib.sha256(args.exe.read_bytes()).hexdigest()}, indent=2))
 
 

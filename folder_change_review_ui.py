@@ -9,7 +9,7 @@ from tkinter import font as tkfont
 from tkinter import filedialog, messagebox, ttk
 
 from folder_change_review import DEFAULT_WORKERS, OUTPUT_FILE, VERSION, capture_error_message, compare_files, create_snapshot, report_error_message
-from runtime_safety import application_directory, offline_runtime, open_application_folder, pasted_path
+from runtime_safety import application_directory, offline_runtime, open_application_folder, pasted_path, inside
 from state_store import StateHistory, path_module
 
 BACKGROUND = '#F3F4F6'
@@ -368,6 +368,8 @@ class Application:
         self.capture_status.set('Reading files and creating a state…')
         def capture():
             # Filesystem/SMB checks belong on the worker, not the UI thread.
+            if inside(self.history.states, root):
+                raise ValueError("The project contains the local state cache. Choose a narrower project folder.")
             self.history.save_settings({'project': root, 'workers': workers, 'report_directory': report_directory})
             output = self.history.new_state_path()
             state = create_snapshot(root, output, workers, lambda text: self.messages.put(('progress', text)))

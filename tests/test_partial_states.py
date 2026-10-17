@@ -2,6 +2,7 @@
 import copy
 import contextlib
 import io
+import os
 import json
 from pathlib import Path
 import tempfile
@@ -18,6 +19,8 @@ class PartialStateTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
+        environment = patch.dict(os.environ, {"LOCALAPPDATA": str(self.base/"MachineData")})
+        environment.start(); self.addCleanup(environment.stop)
         self.root = self.base/'Project'; self.root.mkdir()
         for directory in ('Area', 'Area2'):
             (self.root/directory).mkdir()
