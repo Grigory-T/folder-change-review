@@ -124,7 +124,7 @@ def main():
         broken = base/'broken.fcrstate'; broken.write_bytes(b'not a state')
         failures = [
             ['snapshot','--root',str(base/'missing'),'--output',str(base/'absent.fcrstate')],
-            ['snapshot','--root',str(project),'--output',str(project/'inside.fcrstate')],
+            ['compare','--before',str(broken),'--after',str(broken),'--output',str(project/'inside.xlsx')],
             ['snapshot','--root',str(project),'--output',str(base/'invalid.fcrstate'),'--workers','0'],
             ['snapshot','--root',str(project),'--output',str(base/'invalid.fcrstate'),'--workers','33'],
             ['compare','--before',str(broken),'--after',str(broken),'--output',str(sentinel)],

@@ -83,8 +83,12 @@ class PartialStateTests(unittest.TestCase):
         book = load_workbook(self.base/'Changes.xlsx'); self.addCleanup(book.close)
         self.assertEqual(book.sheetnames,['Changes','Read issues'])
         self.assertIn('Incomplete coverage',book['Changes']['B3'].value)
-        self.assertEqual(book['Read issues']['E2'].value,'=1+1')
-        self.assertEqual(book['Read issues']['E2'].data_type,'s')
+        self.assertEqual(book['Read issues']['E6'].value,'=1+1')
+        self.assertEqual(book['Read issues']['E6'].data_type,'s')
+        self.assertEqual(book['Read issues']['B2'].value,str(self.root))
+        self.assertEqual(book['Read issues']['B3'].value,str(self.root))
+        self.assertEqual(book['Read issues']['C5'].value,'Relative path')
+        self.assertEqual(book['Read issues']['C6'].value,str(Path('Area')/'report.pdf'))
         headers = [cell.value for cell in book['Changes'][6]][1:]
         unknown = next(dict(zip(headers,row)) for row in book['Changes'].iter_rows(min_row=7,min_col=2,values_only=True) if 'Unknown' in row)
         self.assertEqual([unknown[key] for key in ('Added','Deleted','Changed')],[None]*3)
@@ -146,6 +150,12 @@ class PartialStateTests(unittest.TestCase):
         rows=app.compare_snapshots(before,after)
         self.assertEqual({row['FileName']:row['Status'] for row in rows},{'one.pdf':'Unknown','two.pdf':'Deleted'})
 
+    def test_folder_named_like_a_temporary_file_still_covers_unknown_descendants(self):
+        a=copy.deepcopy(self.complete)
+        a['files']=[{'path':str(self.root/'scratch.tmp'/'doc.pdf'),'parts':['scratch.tmp','doc.pdf'],'size':1,'sha256':'a'*64}]
+        b={'root':str(self.root),'files':[],'read_errors':[app.read_issue(str(self.root/'scratch.tmp'),['scratch.tmp'],'directory',PermissionError(13,'Denied'))]}
+        self.assertEqual(app.compare_snapshots(a,b)[0]['Status'],'Unknown')
+
     def test_disk_full_during_save_preserves_output_and_cleans_staging(self):
         output=self.base/'A.fcrstate';original=output.read_bytes()
         def disk_full(path,*args):
@@ -164,4 +174,4 @@ class PartialStateTests(unittest.TestCase):
         book=load_workbook(self.base/'Empty-coverage.xlsx');self.addCleanup(book.close)
         self.assertEqual(book['Changes'].max_row,6)
         self.assertIn('Incomplete coverage',book['Changes']['B3'].value)
-        self.assertEqual(book['Read issues'].max_row,3)
+        self.assertEqual(book['Read issues'].max_row,7)

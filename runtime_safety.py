@@ -5,10 +5,22 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import threading
 
 _offline = False
 _roots = ()
 _open_folder = None
+_output_paths = set()
+_operation_lock = threading.Lock()
+
+
+def pasted_path(value):
+    value = os.fspath(value).strip()
+    return value[1:-1] if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'" else value
+
+
+def path_key(path):
+    return os.path.normcase(absolute(path))
 
 
 def absolute(path):
@@ -70,7 +82,7 @@ def local_storage(path):
 
 def require_local(path):
     if not local_storage(path):
-        raise ValueError("Keep the application, states, reports and temporary files on local storage. SMB project folders are supported.")
+        raise ValueError("State files and processing workspaces must stay on local storage. SMB projects and reports are supported.")
 
 
 def application_directory():
@@ -98,6 +110,10 @@ def audit(event, args):
         value = os.fsdecode(value)
         if dir_fd not in (None, -1) and not os.path.isabs(value):
             value = os.path.join(os.readlink(f"/proc/self/fd/{dir_fd}"), value)
+        if path_key(value) in _output_paths:
+            if os.path.islink(extended(value)):
+                raise PermissionError("Output writes must not follow symbolic links.")
+            return
         if any(inside(value, root) for root in _roots):
             raise PermissionError("The project folder is read-only to this application.")
         if not local_storage(value):
@@ -126,8 +142,6 @@ sys.addaudithook(audit)
 @contextmanager
 def offline_runtime(directory=None):
     global _offline
-    if directory is not None:
-        require_local(directory)
     if getattr(sys, "frozen", False):
         require_local(sys._MEIPASS)
     previous = _offline
@@ -140,18 +154,41 @@ def offline_runtime(directory=None):
 
 @contextmanager
 def safe_operation(roots, output_directory):
+    if not _operation_lock.acquire(blocking=False):
+        raise RuntimeError("Concurrent operations in one process are not supported.")
+    try:
+        with _safe_operation(roots, output_directory):
+            yield
+    finally:
+        _operation_lock.release()
+
+
+@contextmanager
+def _safe_operation(roots, output_directory):
     global _roots
-    require_local(output_directory)
     roots = tuple(absolute(root) for root in roots)
-    if any(inside(output_directory, root) for root in roots):
-        raise ValueError("Save states and reports outside the project folder.")
+    if _roots:
+        raise RuntimeError("Concurrent operations in one process are not supported.")
     if getattr(sys, "frozen", False) and any(inside(sys._MEIPASS, root) for root in roots):
         raise ValueError("The project folder contains the running temporary runtime. Choose a narrower project folder.")
     previous_roots, previous_temp = _roots, tempfile.tempdir
     with offline_runtime():
         _roots = roots
         try:
-            with tempfile.TemporaryDirectory(prefix=".folder-change-review-work-", dir=extended(output_directory)) as workspace:
+            # Prefer the old local output workspace when outside input. SMB or
+            # in-project output always uses local processing storage elsewhere.
+            candidates = [absolute(output_directory)]
+            try:
+                candidates.append(tempfile.gettempdir())
+            except FileNotFoundError:
+                pass
+            candidates.extend((os.environ.get("LOCALAPPDATA"), os.fspath(Path.home())))
+            parent = next((path for path in candidates if path and local_storage(path)
+                           and not any(inside(path, root) for root in roots)
+                           and os.path.isdir(extended(path))), None)
+            if parent is None:
+                raise ValueError("No local processing folder outside the project is available.")
+            with tempfile.TemporaryDirectory(prefix=".folder-change-review-work-", dir=extended(parent)) as workspace:
                 tempfile.tempdir = workspace
                 try:
                     yield
@@ -163,9 +200,21 @@ def safe_operation(roots, output_directory):
 
 def open_application_folder(directory):
     global _open_folder
-    require_local(directory)
     _open_folder = os.path.normcase(absolute(directory))
     try:
         os.startfile(absolute(directory))
     finally:
         _open_folder = None
+
+
+@contextmanager
+def output_writes(paths):
+    """Exact write exceptions for a selected output and its atomic staging file."""
+    keys = {path_key(path) for path in paths}
+    previous = _output_paths.copy()
+    _output_paths.update(keys)
+    try:
+        yield
+    finally:
+        _output_paths.clear()
+        _output_paths.update(previous)

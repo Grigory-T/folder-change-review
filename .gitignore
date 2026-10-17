@@ -12,3 +12,5 @@ __pycache__/
 *.log
 !windows_build/folder-change-review.spec
 .build-runtime.txt
+
+.build-tests.txt

@@ -1,133 +1,135 @@
-# v0.5.0 validation
+# v0.6.0 validation
 
-This release continues capture past individual read failures and records coverage
-explicitly. Permissions are unchanged. Read failures can never silently become
-Added, Deleted or Changed flags. The [machine-readable receipt](validation.json)
-contains aggregate results and checksums. Private inventories, paths, screenshots
-and raw logs are not published. Target tested: Windows 11 x86-64; Windows 10
-remains untested.
+The [machine-readable receipt](validation.json) contains aggregate results and
+checksums. Private inventories, paths, screenshots and raw logs are excluded from
+source and releases. Tested target: Windows 11 x86-64. Windows 10 remains untested.
 
-## Capture and comparison decisions
+## Approved changes
 
-| Situation | Capture behavior | Comparison behavior |
-|---|---|---|
-| Readable, stable file | Store SHA-256 and size | Existing exact full-path/hash rules |
-| Locked or unreadable file | Record a file read issue; continue | Known filename is Unknown; change flags blank |
-| File disappears or changes during hashing | Record a file read issue; continue | Unknown; any size from the readable side is retained |
-| Unreadable subfolder | Record an unavailable subtree; continue elsewhere | Missing files inside that scope are Unknown |
-| Directory iteration fails after yielding some items | Preserve readable records and record the incomplete subtree | Readable records remain comparable; unseen members are Unknown |
-| Entry metadata cannot be read | Record an unknown item/subtree scope | Cover descendants without inventing a directory as a file row |
-| Both captures cannot enumerate a branch | Retain both coverage warnings | No invented filenames; warning remains even if Unknown count is zero |
-| Source root unavailable or cannot be enumerated | Abort capture | Existing states remain available |
-| Disk full, locked destination, output write failure | Abort and clean staging | Preserve the previous destination |
-| Corrupt or unsupported saved state | Reject comparison | Preserve the previous report |
-| Office/temp exclusions or links/reparse points | Preserve existing exclusions and skip counters | No file rows for deliberately excluded items |
+- Sizes follow Folder Review: numeric bytes and MiB for A, B and B − A. Bytes
+  display `#,##0`; MiB display `#,##0.000`, retaining full numeric precision.
+  Known absence is zero for delta; Unknown rows have blank delta. Equal-length
+  edits remain Changed through internal SHA-256, independently of size.
+- Fixed `folder-change-review.xlsx`, atomic replacement and useful Excel-lock
+  messages. Failed saves preserve the previous report and remove staging.
+- Main columns width 5, zoom 70%, freeze rows 1–6 at A7 without frozen columns.
+  Existing hierarchy/name/status order, LCA title, white body, numeric 1/blank
+  flags and `last=1` remain. No native Table, saved pivot or hash column.
+- Read issues shows A/B roots once and relative paths. Conversion is lexical:
+  offline comparison never resolves or contacts the original source.
+- Matching surrounding single/double quotes are removed at user-input boundaries;
+  internal filenames retain literal whitespace and quote characters.
+- A separate development-only frozen runner executes the entire unit/Tk suite.
+  Production excludes its reader and test dependencies.
 
-Unavailable scopes use ancestor lookup, not substring matching or a scan of all
-errors per row. A denied `Area` does not hide a real deletion in `Area2`.
-Windows UNC paths and reversed complete/partial comparisons are covered.
-Each file is attempted once; bounded reads never chase an endlessly growing
-file. SMB timeouts remain controlled by Windows.
+## Flexible placement and safeguards
 
-Format 3 stores errors separately from compact file records. History reads only
-small metadata, including the coverage flag and issue count. Earlier complete
-states remain readable. An older EXE rejects format 3 rather than ignoring
-coverage gaps. No hash, full-path or new flag column is added to the Changes
-sheet. Complete reports retain one sheet. Incomplete reports add a warning above
-the same data layout and a plain Read issues sheet. Unknown rows have `last=1`
-and blank change flags. No native Excel Table, saved pivot or colored body.
+The EXE and reports may be inside the inspected project or on SMB. A report-folder
+chooser supports another local or SMB destination. States/settings remain local:
+`.states` beside a local EXE, or a per-application-folder cache under local user
+application data for an SMB EXE. The unpacked runtime and processing workspace
+remain local and outside the inspected tree. Comparison only needs saved states.
 
-## Tests
+Only selected outputs and their exact staging paths are write exceptions inside
+an inspected tree. Other project content remains read-only to the application.
+Output-file symlinks are rejected; directory junction parents and mapped drives
+are supported. These are application safeguards, not an OS security sandbox.
 
-**58 tests passed on Linux/Xvfb and Windows source, with no skips**:
-46 core tests and 12 real Tk workflow/layout tests. New cases exercise read
-failures with 1, 16 and 32 workers, partial directory iteration, metadata failures,
-vanished files, coverage direction combinations, filename availability, readable
-records inside partially enumerated folders, UNC ancestors, neighboring scopes,
-format validation, legacy states, disk-full rollback and metadata-only history.
-The GUI suite checks incomplete labels/status, the read-issues viewer, Unknown
-report totals and return to idle, alongside the previous workflow/layout cases.
+Captures and comparisons of legacy states exclude `.states` subtrees,
+`*.fcrstate`, the standard tool EXE/report names and legacy timestamped reports,
+preventing tool activity from becoming project changes. New states use format 4;
+formats 1–3 remain readable. Older EXEs reject format 4 rather than silently
+applying incompatible artifact rules. A directory named `scratch.tmp` is still
+traversed, and an unreadable such directory still contributes Unknown coverage.
 
-**13 source/EXE scenarios** match file records and every workbook ZIP member,
-normalizing only creation/modification timestamps. **Seven fatal failure cases**
-match exit codes and output preservation. Previous-release states are readable;
+SMB servers must grant Execute permission to launch an EXE from a share. A real
+read/write-only data share rejected launch with Windows error 5 before the
+application started; SMB project/report operations with a local EXE still passed.
+A separate disposable test EXE with Execute permission launched from SMB, used
+local history and saved its default report to SMB. Only that fixture's Execute
+bits were adjusted; server configuration and unrelated permissions were unchanged.
+The application never changes permissions or elevates itself.
+
+## Automated and native checks
+
+**70 tests passed with zero skips on Linux/Xvfb, Windows source and the frozen
+Windows runner**: 56 core and 14 real Tk tests. Coverage includes size precision,
+positive/negative/zero/Unknown deltas, equal-length edits, artifact exclusions,
+legacy states, exact output exceptions, in-project rollback, SMB history routing,
+quote handling, operation concurrency and GUI report selection/lock recovery.
+Existing bounded hashing, coverage scopes, corruption, disk-full and UI cases pass.
+
+**13 source/production-EXE scenarios** match file records and every workbook ZIP
+member, normalizing only workbook timestamps. **Seven fatal failure cases** match
+exit codes, output preservation and cleanup. Previous-release states are readable;
 the previous EXE rejects current states.
 
-Eight native Windows acceptance assertions pass in a normal, unelevated session:
-exclusive file locks at 16/32 workers, complete retry after unlock, denied
-subfolder recovery with Unknown, complete retry after restoring the fixture ACL,
-denied-root rollback, locked-output rollback, excluded locked Office files and
-staging cleanup. Only disposable fixture ACLs are changed and restored.
-Source/frozen partial reports match, including their warning and issue worksheet.
+**Ten native recovery assertions** pass in an unelevated Windows session:
+exclusive locks at 16/32 workers, complete unlock retry, ACL-denied subtree
+Unknown, restored-fixture-ACL retry, denied-root rollback, locked-state rollback,
+locked-report rollback, report retry, excluded locked Office files and staging
+cleanup. ACL changes affect only disposable fixtures and are restored. Unreadable
+files/subtrees never silently become Added/Deleted/Changed; source-root failure
+still aborts capture.
 
-## Full Desktop and native Excel
+Native placement checks pass for EXE/history/report inside a project, repeated
+capture exclusion, fixed-name overwrite, real input/output/history paths over
+260 characters, a directory-junction report alias and source-offline comparison.
+The long-path test launches the EXE from a short path; it does not establish that
+Windows can launch an EXE whose own pathname exceeds 260 characters. SMB source/
+report parity, local history and rejection of SMB state output also pass.
 
-Two normal, non-administrator full Desktop captures each read **83,222 files /
-17.293 GB**, with **seven read issues**, 16 excluded files and two skipped links.
-Capture wall times were **15.489 s at 16 workers** and **15.506 s at 32**. Controlled
-edits produced **83,224 union rows: 2 Added, 2 Deleted, 1 Changed, 83,219 Unchanged**.
-No incidental changes were found. Only a new test fixture was edited and removed;
-existing Desktop content was read-only. Python/EXE records and workbook members
-matched. EXE compare/export took **15.859 s**. These captures used the initial
-v0.5.0 candidate; subsequent changes clarified lock messages, validated container
-record shapes and refined UI diagnostics. Final EXE checks are listed separately.
+The production GUI runs inside its inspected project, captures complete and
+partial states, selects a nondefault A/B pair, displays read issues and overwrites
+the fixed report. Native Excel verifies ordinary and Unknown pivots/drill-down.
+No application TCP connections were observed. Idle/progress and footer alignment
+were visually inspected.
 
-The final EXE captured **83,592 files with complete coverage** in an elevated
-read-only test. Comparing this inventory against the normal capture identified
-**374 restricted known files as Unknown**, with no false deletions. Four additions
-in that comparison belong to the earlier controlled fixture, which had been
-removed before the elevated capture; they are not access failures.
+## Full Desktop and Excel
 
-Native Excel opened the 83,224-row Desktop workbook normally in **1.876 s**.
-Pivot sums matched all change flags and total rows; changed-file drill-down passed
-in **0.893 s** for pivot creation/checking. Fourteen read-issue rows represent the
-seven failures in each capture. No filenames could be established in those seven
-branches in either normal capture, so this report has zero Unknown file rows.
-The coverage warning and issue sheet still remain visible.
+Two final production-EXE captures, without administrator rights, each read
+**83,204 files / 17.228 GB**, with **seven read issues**. Capture timings were
+**20.069 s at 16 workers** and **20.198 s at 32**, including loading the resulting
+state. Only a new disposable Desktop fixture was edited and removed; existing
+Desktop content was read-only.
 
-The exact final EXE installed in Downloads also completed a normal Desktop
-capture: **83,218 files, seven read issues, 15.580 s at 32 workers**. The controlled
-fixture's four remaining files had already been removed. Comparing the final
-complete and normal inventories produced **83,592 rows: 83,218 Unchanged and
-374 Unknown, with zero Added/Deleted/Changed**. Native Excel opened this report,
-verified all 374 Unknown rows have blank change flags, its seven issue rows and
-correct pivot sums. Both delivery reports were copied with matching checksums.
+The union has **83,206 rows: 2 Added, 2 Deleted, 1 Changed and 83,201 Unchanged**,
+with **+10 bytes net delta** and no incidental changes. Comparison/export took
+**23.096 s**. Both captures could not enumerate the same seven branches: no
+filenames can be invented there, so Unknown file rows are zero, while the warning
+and 14 A/B read-issue rows remain explicit.
 
-The final frozen GUI captured three complete states, selected an older A/B pair,
-then captured a genuinely ACL-denied subtree. It displayed incomplete coverage,
-opened the read-issues viewer and exported a partial report. Native Excel opened
-both normal and partial reports, checked blank change flags for Unknown, and
-created a pivot/drill-down for its single Unknown file. Reports were closed
-without saving and remained byte-identical. No application TCP connections were
-observed. Default, shortened and warning/dialog views were visually inspected.
+**Seven native Excel reports** opened normally: in-project, long-path, SMB report,
+SMB-launched EXE report, complete GUI, partial GUI and full Desktop. Checks cover
+plain data, literal text, numeric formats, frozen rows/zoom, flags, Unknown blank
+delta and pivot sums of both delta units. The Desktop workbook opened in
+**2.311 s**; pivot checks took **0.974 s** and matched all counts and +10 bytes.
+Read-only closure preserved report bytes.
 
-## SMB and packaging
+Timings are observations with uncontrolled caches and concurrent validation,
+not a controlled performance comparison against previous releases. Hash workers
+remain default 16 with manual 32; queue size is bounded and reads are bounded by
+the initial file size. Windows still controls SMB I/O timeout behavior.
 
-The final EXE/source SMB test used **5,000 synthetic files / 327,698,890 bytes**.
-Repeated captures matched exactly: EXE **9.423–10.167 s at 16 workers** and
-**8.216–8.282 s at 32**, including startup. Comparison/export took **2.464 s** for
-5,002 rows (2 Added, 2 Deleted, 1 Changed, 4,997 Unchanged). Comparison after removing
-the source and rejection of output inside the project passed. The synthetic share
-fixture was removed. Timings are observations with uncontrolled caches and
-concurrent validation workloads, not a controlled comparison to older releases.
+## Packaging and repetition
 
-The final single-file EXE is **12,117,305 bytes**. Python 3.13.14, PyInstaller 6.22.0
-and XlsxWriter 3.2.9 remain pinned. Embedded application code matches source;
-390 distinct code filenames are relative and 1,348 decompressed payloads pass the
-private-token audit. Runtime network/subprocess/write safeguards and the bounded
-worker queue remain. Clean rebuild and delivery checksum results are recorded in
-the receipt. Private test data is excluded from the repository and release.
+The production single-file EXE is **12,121,687 bytes**, SHA-256
+`5028105a596a64bb392d601419adf9b5c3f016c43de149ed85e4390edadfa1bc`.
+Python 3.13.14, PyInstaller 6.22.0 and XlsxWriter 3.2.9 remain pinned. Embedded
+application code matches source; 390 code filenames are relative and 1,348
+payloads pass the private-token audit. A clean repeat build is byte-identical.
+The test EXE is not published or included in production.
 
-## Repeating checks
-
-Use the README unit-test command with Xvfb for headless Tk checks. On Windows:
+Use the README unit command with Xvfb for headless Tk. On Windows build production
+with `BUILD-EXE.bat`, then the development runner with `BUILD-TEST-EXE.bat`:
 
 ```powershell
-.\.build-venv\Scripts\python.exe windows_build\inspect_exe.py dist\folder-change-review.exe
+.\dist\folder-change-review-tests.exe --results C:\Review\frozen-suite.json
 .\.venv\Scripts\python.exe windows_build\verify.py --exe C:\Review\folder-change-review.exe --results C:\Review\Parity
 ```
 
-Run `tests/windows_failure_acceptance.py` without elevation to exercise real
-normal-user ACL denials. Native Excel tests require a separate pywin32 test
-installation and an interactive desktop; the application requires neither Excel
-nor pywin32 to create its reports.
+Run `tests/windows_failure_acceptance.py` without elevation for real normal-user
+ACL denials. `tests/windows_placement_acceptance.py` uses disposable local/share
+fixtures; it never changes share permissions. Native Excel checks require a
+separate pywin32 test installation and interactive desktop. The tool needs
+neither Excel nor pywin32 to create reports.

@@ -1,13 +1,14 @@
 """Compressed machine states and managed local state history."""
 from datetime import datetime
 import json
+import hashlib
 import ntpath
 import os
 from pathlib import Path
 import uuid
 import zipfile
 
-from runtime_safety import absolute, extended, require_local
+from runtime_safety import absolute, extended, local_storage, require_local
 
 FORMAT = "folder-change-review.snapshot"
 EXTENSION = ".fcrstate"
@@ -19,13 +20,13 @@ def path_module(root):
 
 def write_container(path, snapshot):
     metadata = {key: value for key, value in snapshot.items() if key not in ("files", "read_errors")}
-    metadata.update({"version": 3 if snapshot.get("version") == 3 else 2, "file_count": len(snapshot["files"]), "hash_algorithm": "sha256"})
+    metadata.update({"version": snapshot["version"] if snapshot.get("version") in (3, 4) else 2, "file_count": len(snapshot["files"]), "hash_algorithm": "sha256"})
     module = path_module(snapshot["root"])
     records = [[module.relpath(row["path"], snapshot["root"]), row["size"], row["sha256"]] for row in snapshot["files"]]
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
         archive.writestr("metadata.json", json.dumps(metadata, ensure_ascii=False, separators=(",", ":")))
         archive.writestr("files.json", json.dumps(records, ensure_ascii=False, separators=(",", ":")))
-        if metadata["version"] == 3:
+        if metadata["version"] in (3, 4):
             errors = [[module.relpath(issue["path"], snapshot["root"]), issue["kind"], issue["errno"],
                        issue["winerror"], issue["message"]] for issue in snapshot["read_errors"]]
             archive.writestr("errors.json", json.dumps(errors, ensure_ascii=False, separators=(",", ":")))
@@ -38,11 +39,11 @@ def read_metadata(path):
         if info.file_size > 1_048_576:
             raise ValueError("Invalid state metadata.")
         metadata = json.loads(archive.read(info))
-    if not isinstance(metadata, dict) or metadata.get("format") != FORMAT or metadata.get("version") not in (2, 3) or metadata.get("hash_algorithm") != "sha256":
+    if not isinstance(metadata, dict) or metadata.get("format") != FORMAT or metadata.get("version") not in (2, 3, 4) or metadata.get("hash_algorithm") != "sha256":
         raise ValueError("Unsupported state format.")
     if not isinstance(metadata.get("root"), str) or not metadata["root"] or type(metadata.get("file_count")) is not int or metadata["file_count"] < 0:
         raise ValueError("Invalid state metadata.")
-    if metadata["version"] == 3:
+    if metadata["version"] in (3, 4):
         count = metadata.get("read_error_count")
         if type(count) is not int or count < 0 or type(metadata.get("complete")) is not bool or metadata["complete"] != (count == 0):
             raise ValueError("Invalid state coverage metadata.")
@@ -59,7 +60,7 @@ def read_container(path):
     with zipfile.ZipFile(extended(path)) as archive:
         try:
             records = json.loads(archive.read("files.json"))
-            errors = json.loads(archive.read("errors.json")) if metadata["version"] == 3 else []
+            errors = json.loads(archive.read("errors.json")) if metadata["version"] in (3, 4) else []
         except KeyError as error:
             raise ValueError("State is damaged: a required record file is missing.") from error
     if not isinstance(records, list) or not isinstance(errors, list):
@@ -76,7 +77,7 @@ def read_container(path):
         files.append({"path": module.join(metadata["root"], relative),
                       "parts": relative.split(module.sep), "size": size, "sha256": digest})
     result = {**metadata, "files": files}
-    if metadata["version"] == 3:
+    if metadata["version"] in (3, 4):
         result["read_errors"] = []
         for record in errors:
             if not isinstance(record, list) or len(record) != 5:
@@ -91,10 +92,10 @@ def read_container(path):
 
 
 def validate_coverage(snapshot):
-    if snapshot.get("version") != 3:
+    if snapshot.get("version") not in (3, 4):
         # Older readers must never silently accept partial-state coverage.
         if snapshot.get("read_errors") or snapshot.get("complete") is False:
-            raise ValueError("Partial states require format version 3.")
+            raise ValueError("Partial states require format version 3 or later.")
         return
     errors = snapshot.get("read_errors")
     if (not isinstance(errors, list) or type(snapshot.get("read_error_count")) is not int
@@ -118,11 +119,15 @@ def validate_coverage(snapshot):
 class StateHistory:
     def __init__(self, directory):
         self.directory = Path(absolute(directory))
-        require_local(self.directory)
         self.states = self.directory / ".states"
+        if not local_storage(self.directory):
+            cache = Path(os.environ.get("LOCALAPPDATA", Path.home()/".local"/"share")) / "FolderChangeReview" / "histories"
+            key = hashlib.sha256(os.path.normcase(str(self.directory)).encode("utf-8")).hexdigest()[:24]
+            self.states = cache / key / ".states"
+        require_local(self.states)
 
     def ensure(self):
-        self.states.mkdir(exist_ok=True)
+        Path(extended(self.states)).mkdir(parents=True, exist_ok=True)
         if os.name == "nt":
             import ctypes
             get = ctypes.windll.kernel32.GetFileAttributesW
@@ -138,12 +143,13 @@ class StateHistory:
         return self.states / ("state-" + datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8] + EXTENSION)
 
     def new_report_path(self):
-        return self.directory / ("folder-changes-" + datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6] + ".xlsx")
+        return self.directory / "folder-change-review.xlsx"
 
     def list_states(self):
         items, errors = [], []
-        if self.states.exists():
-            for path in self.states.glob("*" + EXTENSION):
+        if Path(extended(self.states)).exists():
+            for path in Path(extended(self.states)).glob("*" + EXTENSION):
+                path = Path(absolute(path))
                 try:
                     metadata = read_metadata(path)
                     items.append({"path": path, "metadata": metadata})

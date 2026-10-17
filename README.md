@@ -9,11 +9,11 @@ for your own pivot table. Local folders, SMB shares and mapped drives are suppor
 Download `folder-change-review.exe` from [Releases](https://github.com/Grigory-T/folder-change-review/releases/latest).
 No Python or installation is required.
 
-1. Put the EXE in a separate **local** folder outside the project.
+1. Put the EXE in a writable folder. It may be inside the project or on an SMB share that allows EXE execution.
 2. Double-click it, choose the project folder and click **Create state**.
 3. At another time, create another state of the same folder.
 4. In **Compare saved states**, choose **Before (A)** and **After (B)**, then click **Create Excel report**.
-5. The `.xlsx` report appears beside the EXE. **Open report folder** opens that folder.
+5. **`folder-change-review.xlsx`** appears beside the EXE. Use **Choose report folder…** for another local or SMB destination. **Open report folder** opens the selected folder. A successful comparison atomically replaces the previous report.
 
 The window has two independent numbered blocks: **Create a state** and
 **Compare saved states**. You can compare existing captures without creating a
@@ -27,7 +27,7 @@ The report-folder control stays visible. Long folder paths remain selectable
 and can be scrolled horizontally for inspection.
 
 Capture dates and file counts identify states in the chooser. State files and
-settings are managed automatically in a hidden `.states` folder beside the EXE.
+settings are managed automatically in a hidden `.states` folder beside a local EXE. For an EXE on SMB, history is kept locally under `%LOCALAPPDATA%\FolderChangeReview\histories`, separately for each application-folder spelling.
 Keep that folder to retain history. States are compressed technical files, not
 workbooks, and need no manual handling. They are not encrypted: keep your working
 folder somewhere appropriate for the project data.
@@ -79,9 +79,9 @@ once: capture never keeps retrying a changing or locked file. A live scan is not
 an atomic point-in-time filesystem snapshot. Network I/O timeouts are controlled
 by Windows and the SMB connection.
 
-New states use format version 3 with compressed relative file records and a
+New states use format version 4 with compressed relative file records and a
 separate read-issue inventory. This version reads earlier complete states.
-Older EXEs reject version 3 instead of silently ignoring its coverage warnings.
+This release also reads formats 1–3. Older EXEs reject version 4 instead of using incompatible artifact-exclusion rules.
 
 Comparison reads only saved states; the original project need not be online.
 No same-root check is performed. Choose two states of the same project using
@@ -92,22 +92,38 @@ the same root path spelling.
 The application makes no web requests, telemetry calls, update checks or runtime
 downloads. Python socket/HTTP APIs and subprocess launches are blocked during
 execution. SMB is accessed through ordinary Windows filesystem reads.
-The application folder, states, reports and temporary working files must be on
-local storage. Running the EXE from a share is rejected. The selected project
-is read-only to the application. The single-file runtime unpacks under the local
-user application-data directory before Python starts. These application checks
-are not an OS security sandbox.
+The EXE may be stored inside the project or on SMB; its process still runs on
+the Windows machine and its unpacked runtime stays local. The SMB server must
+grant Execute permission to launch an EXE directly from a share. Read/write-only
+data shares can still hold projects and reports while the EXE runs locally.
+
+States and processing workspaces stay local. A local EXE uses its writable
+`.states` folder; an SMB EXE uses the local machine cache. Keep a consistent
+application path spelling to use the same cached history. Workspace selection
+never uses the inspected tree. The one-file runtime unpacks under local user
+application data before Python starts.
+
+Only explicitly selected outputs and their atomic-save staging files are write
+exceptions inside a project. Other existing project files remain read-only to the
+application. Saving reports/history may change directory timestamps. Output file
+symlinks are rejected; mapped drives and junction parents are supported.
+
+Reserved tool artifacts are omitted from captures and from comparisons of older
+states: `.states` subtrees, `*.fcrstate`, `folder-change-review.exe`,
+`folder-change-review.xlsx` and legacy `folder-changes-YYYYMMDD-HHMMSS-xxxxxx.xlsx`
+reports. This prevents report/state updates from appearing as project changes.
+These application checks are not an OS security sandbox.
 
 ## Excel
 
 One sheet, `Changes`, follows the [Folder Review](https://github.com/Grigory-T/folder-review) flat-table layout:
 title at B2, column numbering at row 4, headers at row 6, data from row 7,
 `Row number` first and `last` last. Headers are blue with black boundary headers.
-The bordered body is white with no status colors. Calibri 11, 85% zoom, no
-frozen panes, no merged cells, no Excel Table object and no saved pivot.
+The bordered body is white with no status colors. Calibri 11, 70% zoom, column widths of 5 character units,
+rows 1–6 frozen at A7 without frozen columns, no merged cells, no Excel Table object and no saved pivot.
 Header height is 72 points, matching Folder Review; ordinary row height is 14.5.
 Column numbering and `Row number` are numeric, as in Folder Review. Columns
-run from hierarchy/depth through adjacent names, extension, Size A/B, Status
+run from hierarchy/depth through adjacent names, extension, Size A/B/delta, Status
 and Added/Deleted/Changed flags, ending with `last`. Headers and the title are
 English; filenames and paths retain their original text.
 
@@ -115,10 +131,17 @@ The full union includes Added, Deleted, Changed, Unchanged and, when coverage is
 `Added`, `Deleted`, `Changed` use numeric 1 or an empty cell, never zero.
 `last=1` counts all file rows. No Leaf flag or SHA column is exported: hashes
 remain in machine snapshots solely for change detection. Extensions have no dot.
-`Size A (MiB)`/`Size B (MiB)` contain numeric sizes divided by 1,048,576,
-displayed with two decimal places; absent files have blank sizes. Underlying
-precision is retained for accurate sums. Format pivot size values to two
-decimal places if Excel does not inherit that number format.
+Each size has a numeric bytes column (`#,##0`) and a MiB column (`#,##0.000`):
+**A bytes/MiB → B bytes/MiB → delta bytes/MiB**. MiB means bytes / 1,048,576.
+Underlying precision is retained; displayed MiB uses three decimals as in Folder
+Review. Missing A/B values are blank. Delta is B − A, treating only known absence
+as zero: additions are positive, deletions negative, unchanged and equal-length
+edits have zero delta. Unknown rows have blank delta. Never infer Changed from
+size alone: internal SHA-256 still detects equal-length content edits.
+
+The Read issues sheet shows each state's root once and relative issue paths.
+Path conversion is lexical and never contacts the original project. Formula-like
+filenames and diagnostic messages remain literal text.
 
 Select the filtered range starting at B6 and choose Insert > PivotTable.
 Use `Level 1`, `Level 2`, etc. as Rows and sums of `Added`, `Deleted`,
@@ -173,3 +196,20 @@ its exit code (0 success, 1 error). The source CLI prints detailed errors and
 timings. The normal desktop workflow manages all filenames automatically.
 
 See [validation](docs/validation.md) for release checks and measured results.
+
+## Additional Windows validation
+
+`BUILD-TEST-EXE.bat` builds a separate, development-only frozen runner after
+`BUILD-EXE.bat`. It executes the complete core/Tk suite and rejects skipped tests:
+
+```powershell
+.\dist\folder-change-review-tests.exe --results C:\Review\frozen-suite.json
+```
+
+The test runner and its reader/test dependencies are not included in the
+production EXE or release. `tests/windows_placement_acceptance.py` exercises
+in-project placement, long input/output paths, junction aliases, fixed-name
+replacement and SMB reporting using only disposable fixtures. A share that
+denies EXE execution is reported separately; its permissions are not changed by
+the harness. Run `tests/windows_failure_acceptance.py` without elevation for real
+normal-user ACL/lock acceptance.

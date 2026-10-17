@@ -166,6 +166,44 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.assertIn('Unknown: 1', self.app.compare_status.get())
         self.dialog.assert_not_called()
 
+    def test_application_inside_project_captures_and_compares_without_own_artifacts(self):
+        self.app.close()
+        self.directory=self.project/'Tool';self.directory.mkdir()
+        (self.directory/'folder-change-review.exe').write_bytes(b'tool')
+        (self.directory/core.OUTPUT_FILE).write_bytes(b'previous report')
+        (self.project/'doc.pdf').write_bytes(b'before')
+        self.window=tk.Tk();self.window.withdraw()
+        self.app=Application(self.window,self.directory)
+        self.app.project.set("'"+str(self.project)+"'")
+        self.app.capture_button.invoke();self.wait()
+        (self.project/'doc.pdf').write_bytes(b'after longer')
+        self.app.capture_button.invoke();self.wait()
+        self.assertEqual([item['metadata']['file_count'] for item in self.app.items],[1,1])
+        self.app.compare_button.invoke();self.wait()
+        self.assertTrue((self.directory/core.OUTPUT_FILE).exists())
+        self.assertIn('Changed: 1',self.app.compare_status.get())
+        self.app.capture_button.invoke();self.wait()
+        self.assertEqual(self.app.items[0]['metadata']['file_count'],1)
+        self.assert_idle();self.dialog.assert_not_called()
+
+    def test_report_folder_choice_uses_fixed_name_and_preserves_previous_on_failure(self):
+        self.states(2)
+        destination=self.work/'Reports';destination.mkdir()
+        with patch('folder_change_review_ui.filedialog.askdirectory',return_value=str(destination)):
+            self.app.report_folder_button.invoke()
+        self.app.compare_button.invoke();self.wait()
+        report=destination/core.OUTPUT_FILE
+        self.assertTrue(report.exists())
+        self.assertEqual(self.app.history.settings()['report_directory'],str(destination))
+        previous=report.read_bytes()
+        with patch('folder_change_review_ui.compare_files',side_effect=PermissionError(13,'locked',str(report))):
+            self.app.compare_button.invoke();self.wait()
+        self.assertEqual(report.read_bytes(),previous)
+        self.assertIn('Close it in Excel',self.dialog.call_args.args[1])
+        self.app.compare_button.invoke();self.wait()
+        self.assertEqual(len(list(destination.glob('*.xlsx'))),1)
+        self.assert_idle()
+
     def test_filesystem_validation_is_background_and_close_waits(self):
         entered, release = threading.Event(), threading.Event()
         main_thread = threading.get_ident()
@@ -173,9 +211,9 @@ class DesktopWorkflowTests(unittest.TestCase):
             self.assertNotEqual(threading.get_ident(),main_thread)
             entered.set()
             release.wait(3)
-            return True
+            raise ValueError('Unavailable project')
         self.app.project.set(str(self.project))
-        with patch('folder_change_review_ui.inside',side_effect=delayed_validation):
+        with patch('folder_change_review_ui.create_snapshot', side_effect=delayed_validation):
             self.app.capture_button.invoke()
             self.assertTrue(entered.wait(1))
             self.app.close()

@@ -90,12 +90,13 @@ class FolderChangeReviewTests(unittest.TestCase):
         self.assertFalse(any("SHA" in name.upper() for name in headers))
         self.assertEqual(headers[0], "Row number")
         self.assertEqual(headers, ["Row number", "Level 1", "Leaf depth", "Name without extension",
-                                  "File name", "Extension", "Size A (MiB)", "Size B (MiB)",
+                                  "File name", "Extension", "Size A (bytes)", "Size A (MiB)", "Size B (bytes)", "Size B (MiB)",
+                                  "Size delta (bytes)", "Size delta (MiB)",
                                   "Status", "Added", "Deleted", "Changed", "last"])
         self.assertEqual(headers[-1], "last")
         self.assertEqual(sheet.max_row, 9)
-        self.assertIsNone(sheet.freeze_panes)
-        self.assertEqual(sheet.sheet_view.zoomScale, 85)
+        self.assertEqual(sheet.freeze_panes, "A7")
+        self.assertEqual(sheet.sheet_view.zoomScale, 70)
         self.assertEqual(sheet.row_dimensions[6].height, 72)
         self.assertEqual(sheet["B6"].fill.fgColor.rgb, "FF000000")
         self.assertEqual(sheet["C6"].fill.fgColor.rgb, "FF00B0F0")
@@ -106,7 +107,7 @@ class FolderChangeReviewTests(unittest.TestCase):
             self.assertEqual(cells[headers.index("Added")].data_type, "n")
             self.assertIsNone(cells[headers.index("Deleted")].value)
             self.assertIsNone(cells[headers.index("Size A (MiB)")].value)
-            self.assertEqual(cells[headers.index("Size B (MiB)")].number_format, "#,##0.00")
+            self.assertEqual(cells[headers.index("Size B (MiB)")].number_format, "#,##0.000")
             self.assertIn(cells[headers.index("Extension")].value, ("txt", "pdf"))
             self.assertEqual(cells[-1].value, 1)
             self.assertTrue(all(cell.fill.patternType is None for cell in cells))
@@ -131,7 +132,8 @@ class FolderChangeReviewTests(unittest.TestCase):
         self.assertEqual(sheet["B2"].value, f"Table: File changes in folder {self.root}")
         headers = [cell.value for cell in sheet[6]][1:]
         self.assertEqual(headers, ["Row number", "Level 1", "Level 2", "Leaf depth", "Name without extension",
-                                  "File name", "Extension", "Size A (MiB)", "Size B (MiB)",
+                                  "File name", "Extension", "Size A (bytes)", "Size A (MiB)", "Size B (bytes)", "Size B (MiB)",
+                                  "Size delta (bytes)", "Size delta (MiB)",
                                   "Status", "Added", "Deleted", "Changed", "last"])
         records = {row[headers.index("File name")]: dict(zip(headers, row))
                    for row in sheet.iter_rows(min_row=7, min_col=2, values_only=True)}
@@ -176,9 +178,10 @@ class FolderChangeReviewTests(unittest.TestCase):
         self.assertEqual(output.read_bytes(), b"previous report")
         self.assertEqual(list(self.work.glob(".folder-change-review-*")), [])
 
-    def test_no_same_root_check_but_output_must_be_outside_input(self):
-        with self.assertRaises(ValueError):
+    def test_no_same_root_check_and_in_project_output_is_allowed(self):
+        with contextlib.redirect_stdout(io.StringIO()):
             app.create_snapshot(self.root, self.root / "A.fcrstate")
+        self.assertTrue((self.root / "A.fcrstate").exists())
         before = self.snapshot("A.fcrstate")
         other = self.work / "different-project"
         other.mkdir()

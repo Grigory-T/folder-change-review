@@ -94,6 +94,16 @@ def main():
         finally:close(handle)
         assert hashlib.sha256(before.read_bytes()).hexdigest()==checksum
         result['locked_output_aborts_preserves_state']=True
+        report=base/'Partial.xlsx'
+        previous_report=hashlib.sha256(report.read_bytes()).hexdigest()
+        handle=lock(report)
+        compare=[str(args.exe),'compare','--before',str(before),'--after',str(after),'--output',str(report)]
+        try:assert subprocess.run(compare,timeout=60).returncode==1
+        finally:close(handle)
+        assert hashlib.sha256(report.read_bytes()).hexdigest()==previous_report
+        result['locked_report_aborts_preserves_previous']=True
+        subprocess.run(compare,check=True,timeout=60)
+        result['report_retry_after_unlock_succeeds']=True
         # Excluded Office/temp files never need to be opened.
         excluded=project/'~$office.docx';excluded.write_bytes(b'lock')
         handle=lock(excluded)

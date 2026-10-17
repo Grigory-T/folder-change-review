@@ -48,11 +48,12 @@ def main():
         assert 'Full path' not in headers and 'FullPath' not in headers and 'Leaf' not in headers and not any('SHA' in name.upper() for name in headers)
         levels = [name for name in headers if name.startswith('Level ')]
         assert headers == ['Row number', *levels, 'Leaf depth', 'Name without extension',
-                           'File name', 'Extension', 'Size A (MiB)', 'Size B (MiB)',
+                           'File name', 'Extension', 'Size A (bytes)', 'Size A (MiB)', 'Size B (bytes)', 'Size B (MiB)',
+                           'Size delta (bytes)', 'Size delta (MiB)',
                            'Status', 'Added', 'Deleted', 'Changed', 'last']
         assert sheet.Cells(2,2).Value.startswith('Table: File changes in folder ')
-        assert sheet.Rows(6).RowHeight == 72 and excel.ActiveWindow.Zoom == 85
-        assert not excel.ActiveWindow.FreezePanes
+        assert sheet.Rows(6).RowHeight == 72 and excel.ActiveWindow.Zoom == 70
+        assert excel.ActiveWindow.FreezePanes and excel.ActiveWindow.SplitRow == 6 and excel.ActiveWindow.SplitColumn == 0
         assert sheet.Cells(6,2).Interior.Color == 0 and sheet.Cells(6,last).Interior.Color == 0
         assert sheet.Cells(6,3).Interior.Color == 15773696
         def column_values(column):
@@ -68,18 +69,28 @@ def main():
             column = headers.index(name)+2
             values = column_values(column)
             assert all(row[0] in (None,1) for row in values)
-        for name in ('Size A (MiB)','Size B (MiB)'):
+        for name in ('Size A (MiB)','Size B (MiB)','Size delta (MiB)'):
             column = headers.index(name)+2
             if args.rows:
-                assert sheet.Range(sheet.Cells(7,column),sheet.Cells(6+args.rows,column)).NumberFormat == '#,##0.00'
+                assert sheet.Range(sheet.Cells(7,column),sheet.Cells(6+args.rows,column)).NumberFormat == '#,##0.000'
         column = headers.index('Extension')+2
         values = column_values(column)
         assert all(row[0] is None or not row[0].startswith('.') for row in values)
         if args.expect_file:
             names = {row[0] for row in column_values(headers.index('File name')+2)}
             assert set(args.expect_file) <= names, (args.expect_file,names)
+        sizes_a=column_values(headers.index('Size A (bytes)')+2)
+        sizes_b=column_values(headers.index('Size B (bytes)')+2)
+        deltas=column_values(headers.index('Size delta (bytes)')+2)
         statuses = column_values(headers.index('Status')+2)
+        for status,a,b,delta in zip(statuses,sizes_a,sizes_b,deltas):
+            if status[0]=='Unknown':assert delta[0] is None
+            else:assert delta[0]==(b[0] or 0)-(a[0] or 0)
         assert sum(row[0]=='Unknown' for row in statuses)==args.unknown
+        for name in ('Size A (bytes)','Size B (bytes)','Size delta (bytes)'):
+            if args.rows:
+                column=headers.index(name)+2
+                assert sheet.Range(sheet.Cells(7,column),sheet.Cells(6+args.rows,column)).NumberFormat=='#,##0'
         for name in ('Added','Deleted','Changed'):
             values = column_values(headers.index(name)+2)
             assert all(value[0] is None for status,value in zip(statuses,values) if status[0]=='Unknown')
@@ -97,6 +108,12 @@ def main():
                 # With numeric 1/blank source flags, an entirely blank field
                 # can produce a blank zero total in native Excel.
                 assert actual[name] == value or (actual[name] is None and value == 0), (name,actual[name],value)
+            for name in ('Size delta (bytes)','Size delta (MiB)'):
+                expected_delta=sum((row[0] or 0) for row in column_values(headers.index(name)+2))
+                pivot.AddDataField(pivot.PivotFields(name),'Sum '+name,-4157)
+                total=pivot.GetPivotData('Sum '+name).Value
+                assert abs((total or 0)-expected_delta)<1e-9,(name,total,expected_delta)
+                actual[name]=total
         if args.changed_file:
             pivot.GetPivotData('Sum Changed','Status','Changed').ShowDetail = True
             detail = book.ActiveSheet

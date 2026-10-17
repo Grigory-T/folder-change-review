@@ -12,6 +12,7 @@ import hashlib
 import json
 import ntpath
 import os
+import re
 from pathlib import Path
 import stat
 import sys
@@ -19,13 +20,15 @@ import tempfile
 import time
 import zipfile
 
-from runtime_safety import absolute, application_directory, extended, inside, offline_runtime, require_local, safe_operation
+from runtime_safety import absolute, application_directory, extended, inside, offline_runtime, output_writes, pasted_path, require_local, safe_operation
 from state_store import read_container, validate_coverage, write_container
 
 sys.dont_write_bytecode = True
-VERSION = "0.5.0"
+VERSION = "0.6.0"
+OUTPUT_FILE = "folder-change-review.xlsx"
 SNAPSHOT_FORMAT = "folder-change-review.snapshot"
-EXCLUSIONS = ["~*", "Thumbs.db", "*.tmp", "*.temp"]
+EXCLUSIONS = ["~*", "Thumbs.db", "*.tmp", "*.temp", "*.fcrstate", ".states/", "folder-change-review.exe", OUTPUT_FILE,
+              "folder-changes-YYYYMMDD-HHMMSS-xxxxxx.xlsx"]
 MAX_DATA_ROWS = 1_048_570  # header row 6, data from row 7
 DEFAULT_WORKERS = 16
 HASH_BUFFER_SIZE = 256 * 1024
@@ -53,33 +56,50 @@ def capture_error_message(error: Exception) -> str:
             "No state was saved. Existing states are unchanged. Unreadable items are not silently omitted.")
 
 
+def report_error_message(error):
+    if isinstance(error, PermissionError) or getattr(error, "winerror", None) in (5, 32, 33):
+        path = getattr(error, "filename2", None) or getattr(error, "filename", None)
+        location = f"\n\nPath: {absolute(path)}" if path else ""
+        return ("The report could not be replaced. Close it in Excel and retry. "
+                "Also check write permission and the SMB connection for the report folder."
+                + location + "\n\nThe previous report is unchanged.")
+    return str(error)
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def ignored(name: str) -> bool:
     name = name.lower()
-    return name.startswith("~") or name == "thumbs.db" or name.endswith((".tmp", ".temp"))
+    return (name.startswith("~") or name in ("thumbs.db", "folder-change-review.exe", OUTPUT_FILE)
+            or name.endswith((".tmp", ".temp", ".fcrstate"))
+            or re.fullmatch(r"folder-changes-\d{8}-\d{6}-[0-9a-f]{6}\.xlsx", name) is not None)
 
 
 @contextmanager
-def staged_output(output: str | Path):
+def staged_output(output: str | Path, local_only=True):
     """Replace the final file only after successful completion."""
     target = absolute(output)
     parent = os.path.dirname(target)
-    require_local(parent)
+    if local_only:
+        require_local(parent)
+    if os.path.islink(extended(target)):
+        raise ValueError("Output must not be a symbolic link.")
     if not os.path.isdir(extended(parent)):
         raise ValueError(f"Output folder does not exist: {parent}")
-    descriptor, temporary = tempfile.mkstemp(prefix=".folder-change-review-", dir=extended(parent))
-    os.close(descriptor)
-    try:
-        yield temporary
-        os.replace(temporary, extended(target))
-    finally:
+    temporary = os.path.join(parent, ".folder-change-review-" + os.urandom(16).hex() + ".tmp")
+    with output_writes((target, temporary)):
+        descriptor = os.open(extended(temporary), os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
+        os.close(descriptor)
         try:
-            os.unlink(temporary)
-        except FileNotFoundError:
-            pass
+            yield extended(temporary)
+            os.replace(extended(temporary), extended(target))
+        finally:
+            try:
+                os.unlink(extended(temporary))
+            except FileNotFoundError:
+                pass
 
 
 def hash_file(path: str) -> tuple[str, int]:
@@ -132,9 +152,15 @@ def scan_files(root: str, stats: dict, issues: list):
         try:
             with os.scandir(extended(folder)) as entries:
                 for entry in entries:
+                    if entry.name.casefold() == ".states":
+                        stats["excluded_state_directories"] = stats.get("excluded_state_directories", 0) + 1
+                        continue
                     path = os.path.join(folder, entry.name)
                     child_parts = (*parts, entry.name)
                     try:
+                        if ignored(entry.name) and entry.is_file(follow_symlinks=False):
+                            stats["excluded_files"] += 1
+                            continue
                         properties = entry.stat(follow_symlinks=False)
                         reparse = getattr(properties, "st_file_attributes", 0) & 0x400
                         if entry.is_symlink() or reparse:
@@ -161,6 +187,8 @@ def scan_files(root: str, stats: dict, issues: list):
 
 
 def create_snapshot(root: str | Path, output: str | Path, workers: int = DEFAULT_WORKERS, progress=None) -> dict:
+    root = pasted_path(root)
+    require_local(output)
     with safe_operation((root,), os.path.dirname(absolute(output))):
         return _create_snapshot(root, output, workers, progress)
 
@@ -171,10 +199,8 @@ def _create_snapshot(root, output, workers, progress):
         raise ValueError("Workers must be between 1 and 32.")
     if not os.path.isdir(extended(root)):
         raise ValueError(f"Project folder is unavailable: {root}")
-    if inside(output, root):
-        raise ValueError("Save snapshots outside the project folder being scanned.")
     started, timer = now(), time.perf_counter()
-    stats = {"excluded_files": 0, "skipped_links": 0}
+    stats = {"excluded_files": 0, "skipped_links": 0, "excluded_state_directories": 0}
     files, issues = [], []
     jobs = scan_files(root, stats, issues)
     def record(job, result):
@@ -219,7 +245,7 @@ def _create_snapshot(root, output, workers, progress):
     hash_seconds = time.perf_counter() - timer
     files.sort(key=lambda record: record["path"])
     issues.sort(key=lambda issue: (issue["path"], issue["kind"]))
-    snapshot = {"format": SNAPSHOT_FORMAT, "version": 3, "hash_algorithm": "sha256", "root": root,
+    snapshot = {"format": SNAPSHOT_FORMAT, "version": 4, "hash_algorithm": "sha256", "root": root,
                 "started_utc": started, "completed_utc": now(),
                 "exclusions": EXCLUSIONS, **stats, "files": files, "file_count": len(files),
                 "read_errors": issues, "read_error_count": len(issues), "complete": not issues,
@@ -242,7 +268,7 @@ def load_snapshot(path: str | Path) -> dict:
         # Read compatibility for earlier machine JSON states; new states are compressed.
         with open(extended(path), encoding="utf-8") as stream:
             snapshot = json.load(stream)
-    if snapshot.get("format") != SNAPSHOT_FORMAT or snapshot.get("version") not in (1, 2, 3):
+    if snapshot.get("format") != SNAPSHOT_FORMAT or snapshot.get("version") not in (1, 2, 3, 4):
         raise ValueError(f"Unsupported snapshot format: {path}")
     validate_coverage(snapshot)
     seen = set()
@@ -264,11 +290,16 @@ def load_snapshot(path: str | Path) -> dict:
 def compare_snapshots(before: dict, after: dict) -> list[dict]:
     # Coverage lookup is O(path depth), not O(files * read errors).
     def inventory(snapshot):
-        records = {record["path"]: record for record in snapshot["files"]}
+        # Apply reserved-artifact exclusions to old inventories too, so a policy
+        # change does not report the tool's former outputs as project deletions.
+        records = {record["path"]: record for record in snapshot["files"]
+                   if not ignored(record["parts"][-1]) and ".states" not in (part.casefold() for part in record["parts"])}
         scopes = set()
         root = snapshot.get("root", "")
         module = ntpath if ntpath.splitdrive(root)[0] or root.startswith("\\\\") else os.path
         for issue in snapshot.get("read_errors", []):
+            if issue["parts"] and ((issue["kind"] == "file" and ignored(issue["parts"][-1])) or ".states" in (part.casefold() for part in issue["parts"])):
+                continue
             if issue["kind"] == "file":
                 records.setdefault(issue["path"], {"path": issue["path"], "parts": issue["parts"], "size": None, "sha256": None})
             else:
@@ -308,7 +339,8 @@ def compare_snapshots(before: dict, after: dict) -> list[dict]:
                      "Deleted": 1 if status == "Deleted" else None,
                      "Changed": 1 if status == "Changed" else None,
                      "SizeA": None if a is None else a["size"],
-                     "SizeB": None if b is None else b["size"]})
+                     "SizeB": None if b is None else b["size"],
+                     "SizeDelta": None if status == "Unknown" else (b["size"] if b else 0) - (a["size"] if a else 0)})
     return rows
 
 
@@ -329,7 +361,7 @@ def report_hierarchy(rows: list[dict], root_hint: str = "") -> tuple[str, list[l
     return ancestor, parts
 
 
-def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read_errors=()) -> None:
+def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read_errors=(), issue_roots=None) -> None:
     import xlsxwriter
 
     if len(rows) > MAX_DATA_ROWS:
@@ -337,22 +369,23 @@ def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read
     ancestor, paths = report_hierarchy(rows, root_hint)
     depth = max((len(parts) for parts in paths), default=1)
     fields = ["Leaf depth", "Name without extension", "File name", "Extension",
-              "Size A (MiB)", "Size B (MiB)", "Status", "Added", "Deleted", "Changed"]
+              "Size A (bytes)", "Size A (MiB)", "Size B (bytes)", "Size B (MiB)",
+              "Size delta (bytes)", "Size delta (MiB)", "Status", "Added", "Deleted", "Changed"]
     headers = ["Row number", *[f"Level {index}" for index in range(1, depth + 1)], *fields, "last"]
     if len(headers) + 1 > 16_384:  # column A is blank
         raise ValueError("Folder hierarchy exceeds Excel's column limit.")
-    with staged_output(output) as temporary:
+    with staged_output(output, local_only=False) as temporary:
         with xlsxwriter.Workbook(temporary, {
             "constant_memory": True, "strings_to_formulas": False,
             "strings_to_urls": False, "strings_to_numbers": False,
-            "tmpdir": os.path.dirname(extended(output)),
+            "tmpdir": tempfile.gettempdir(),
         }) as workbook:
             workbook.set_calc_mode("auto", 191029)
             workbook.set_size(1484, 843)
             workbook.set_tab_ratio(92.8)
             sheet = workbook.add_worksheet("Changes")
             sheet.hide_gridlines(2)
-            sheet.set_zoom(85)
+            sheet.set_zoom(70)
             sheet.set_tab_color("#002060")
             sheet.outline_settings(True, False, False, False)
             sheet.set_default_row(14.5)
@@ -365,16 +398,14 @@ def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read
             border = {**font, "border": 1, "border_color": "#000000"}
             body = workbook.add_format(border)
             centered = workbook.add_format({**border, "align": "center", "valign": "vcenter"})
-            size_format = workbook.add_format({**border, "num_format": "#,##0.00"})
+            size_format = workbook.add_format({**border, "num_format": "#,##0.000"})
+            bytes_format = workbook.add_format({**border, "num_format": "#,##0"})
             title = workbook.add_format({**font, "bold": True})
             header_format = {**border, "bold": True, "align": "center", "valign": "vcenter", "text_wrap": True}
             header = workbook.add_format({**header_format, "bg_color": "#00B0F0"})
             boundary = workbook.add_format({**header_format, "bg_color": "#000000", "font_color": "#FFFFFF"})
-            sheet.set_column(0, 0, 5.81640625 - 5 / 7)
-            widths = {"Row number": 9, "Name without extension": 20, "File name": 24}
-            for column, text in enumerate(headers, 1):
-                width = widths.get(text, 5.81640625 if column in (1, len(headers)) else 12.54296875)
-                sheet.set_column(column, column, width - 5 / 7)
+            sheet.set_column(0, len(headers), 5)
+            sheet.freeze_panes("A7")
             # Match the accepted Folder Review layout, including its taller header.
             sheet.set_row(5, 72)
             sheet.write_string(1, 1, f"Table: File changes in folder {ancestor or root_hint}", title)
@@ -386,14 +417,19 @@ def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read
                 sheet.write_string(5, column, text, boundary if column in (1, len(headers)) else header)
             for index, row in enumerate(rows, 1):
                 parts = paths[index - 1]
-                values = [index, *parts, *([None] * (depth - len(parts))), len(parts),
-                          ntpath.splitext(row["FileName"])[0], row["FileName"], row["Extension"],
-                          None if row["SizeA"] is None else row["SizeA"] / (1024 * 1024),
-                          None if row["SizeB"] is None else row["SizeB"] / (1024 * 1024),
-                          row["Status"], row["Added"], row["Deleted"], row["Changed"], 1]
-                for column, value in enumerate(values, 1):
-                    label = headers[column - 1]
-                    fmt = size_format if label in ("Size A (MiB)", "Size B (MiB)") else centered if label in (
+                values = {"Row number": index, "Leaf depth": len(parts),
+                          "Name without extension": ntpath.splitext(row["FileName"])[0],
+                          "File name": row["FileName"], "Extension": row["Extension"],
+                          "Status": row["Status"], "Added": row["Added"], "Deleted": row["Deleted"],
+                          "Changed": row["Changed"], "last": 1,
+                          **{f"Level {i}": part for i, part in enumerate(parts, 1)}}
+                for label, key in (("A", "SizeA"), ("B", "SizeB"), ("delta", "SizeDelta")):
+                    amount = row.get(key)
+                    values[f"Size {label} (bytes)"] = amount
+                    values[f"Size {label} (MiB)"] = None if amount is None else amount / 1_048_576
+                for column, label in enumerate(headers, 1):
+                    value = values.get(label)
+                    fmt = size_format if label.endswith("(MiB)") else bytes_format if label.endswith("(bytes)") else centered if label in (
                         "Row number", "last", "Leaf depth", "Extension", "Status", "Added", "Deleted", "Changed"
                     ) else body
                     if isinstance(value, str):
@@ -413,14 +449,27 @@ def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read
                 issues_sheet.set_column(2, 2, 80)
                 issues_sheet.set_column(3, 3, 12)
                 issues_sheet.set_column(4, 4, 65)
-                issues_sheet.write_row(0, 0, ["State", "Item type", "Path", "OS error", "Reason"], header)
-                for index, (label, issue) in enumerate(read_errors, 1):
-                    values = [label, issue["kind"], issue["path"],
+                roots = issue_roots or {}
+                issues_sheet.write_string(0, 0, "Read issues", title)
+                issues_sheet.write_string(1, 0, "State A root", body)
+                issues_sheet.write_string(1, 1, roots.get("A", root_hint), body)
+                issues_sheet.write_string(2, 0, "State B root", body)
+                issues_sheet.write_string(2, 1, roots.get("B", root_hint), body)
+                issues_sheet.write_row(4, 0, ["State", "Item type", "Relative path", "OS error", "Reason"], header)
+                for index, (label, issue) in enumerate(read_errors, 5):
+                    root = roots.get(label, root_hint)
+                    module = ntpath if ntpath.splitdrive(root)[0] else os.path
+                    try:
+                        relative = module.relpath(issue["path"], root) if root else issue["path"]
+                    except ValueError:
+                        relative = issue["path"]
+                    values = [label, issue["kind"], relative,
                               str(issue["winerror"] if issue["winerror"] is not None else issue["errno"] or ""), issue["message"]]
                     for column, value in enumerate(values):
                         if issues_sheet.write_string(index, column, value, body) != 0:
                             raise ValueError("Read issue text cannot fit in an Excel cell.")
-                issues_sheet.autofilter(0, 0, len(read_errors), 4)
+                issues_sheet.autofilter(4, 0, 4 + len(read_errors), 4)
+                issues_sheet.freeze_panes(5, 0)
 
 
 def compare_files(before_path: str | Path, after_path: str | Path, output: str | Path, progress=None) -> Counter:
@@ -431,23 +480,17 @@ def compare_files(before_path: str | Path, after_path: str | Path, output: str |
         raise ValueError("Comparison output must not replace a snapshot.")
     started = time.perf_counter()
     before, after = load_snapshot(before_path), load_snapshot(after_path)
-    # Comparing saved states must not resolve or contact their original SMB roots.
-    for snapshot in (before, after):
-        try:
-            common = os.path.commonpath((os.path.normcase(target), os.path.normcase(snapshot["root"])))
-        except ValueError:  # Different drives cannot overlap.
-            continue
-        if common == os.path.normcase(snapshot["root"]):
-            raise ValueError("Save the Excel report outside the project folder.")
+    # No source-root resolution: comparison works with the projects offline.
     rows = compare_snapshots(before, after)
     comparison_seconds = time.perf_counter() - started
     writing_started = time.perf_counter()
     emit("Writing the Excel report...", progress)
     with safe_operation((), os.path.dirname(target)):
         read_errors = [(label, issue) for label, snapshot in (("A", before), ("B", after)) for issue in snapshot.get("read_errors", [])]
-        if len(read_errors) > 1_048_575:
+        if len(read_errors) > 1_048_571:
             raise ValueError("Read issues exceed Excel's worksheet row limit.")
-        write_report(rows, target, after.get("root", before.get("root", "")), read_errors)
+        write_report(rows, target, after.get("root", before.get("root", "")), read_errors,
+                     {"A": before["root"], "B": after["root"]})
     counts = Counter(row["Status"] for row in rows)
     emit(f"Union: {len(rows):,} files", progress)
     emit(" | ".join(f"{status}: {counts[status]:,}" for status in ("Added", "Deleted", "Changed", "Unchanged", "Unknown")), progress)
@@ -483,19 +526,19 @@ def _main(argv: list[str] | None = None) -> int:
             compare = commands.add_parser("compare", help="Compare two snapshots and write plain Excel data")
             compare.add_argument("--before", required=True)
             compare.add_argument("--after", required=True)
-            compare.add_argument("--output", required=True)
+            compare.add_argument("--output", default=str(application_directory() / OUTPUT_FILE))
             args = parser.parse_args(arguments)
             if args.command == "snapshot":
-                create_snapshot(args.root, args.output, args.workers)
+                create_snapshot(pasted_path(args.root), pasted_path(args.output), args.workers)
             else:
-                compare_files(args.before, args.after, args.output)
+                compare_files(pasted_path(args.before), pasted_path(args.after), pasted_path(args.output))
         result = 0
     except KeyboardInterrupt:
         if sys.stderr is not None:
             print("Cancelled.", file=sys.stderr)
         result = 130
     except Exception as error:
-        message = capture_error_message(error) if arguments and arguments[0] == "snapshot" else str(error)
+        message = capture_error_message(error) if arguments and arguments[0] == "snapshot" else report_error_message(error)
         if not arguments and os.name == "nt":
             import ctypes
             ctypes.windll.user32.MessageBoxW(None, message, "Folder Change Review", 0x10)
