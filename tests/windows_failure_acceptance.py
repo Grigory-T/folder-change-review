@@ -1,12 +1,23 @@
-"""Check real Windows sharing violations and atomic state preservation."""
+"""Real Windows file locks, ACL-denied folders and atomic output preservation.
+
+Run without elevation so ACL cases exercise normal user permissions.
+ACL changes apply only to newly created disposable fixtures. icacls is a test
+harness dependency; the production application never launches subprocesses.
+"""
 import argparse
 import ctypes
+import csv
+import io
 from ctypes import wintypes
 import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import folder_change_review as app
 
 
 def main():
@@ -15,32 +26,85 @@ def main():
     parser.add_argument('--work', type=Path, required=True)
     args = parser.parse_args()
     args.work.mkdir(parents=True,exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='fcr-failure-',dir=args.work) as temporary:
-        base = Path(temporary)
-        project = base/'project'; project.mkdir()
-        document = project/'locked.docx'; document.write_bytes(b'document')
-        output = base/'previous.fcrstate'
-        command = [str(args.exe),'snapshot','--root',str(project),'--output',str(output),'--workers','32']
-        subprocess.run(command,check=True,timeout=60)
-        checksum = hashlib.sha256(output.read_bytes()).hexdigest()
-        create = ctypes.windll.kernel32.CreateFileW
-        create.argtypes = [wintypes.LPCWSTR,wintypes.DWORD,wintypes.DWORD,ctypes.c_void_p,wintypes.DWORD,wintypes.DWORD,wintypes.HANDLE]
-        create.restype = wintypes.HANDLE
-        close = ctypes.windll.kernel32.CloseHandle
-        close.argtypes = [wintypes.HANDLE]
-        handle = create(str(document),0x80000000,0,None,3,0,None)
+    create = ctypes.windll.kernel32.CreateFileW
+    create.argtypes = [wintypes.LPCWSTR,wintypes.DWORD,wintypes.DWORD,ctypes.c_void_p,wintypes.DWORD,wintypes.DWORD,wintypes.HANDLE]
+    create.restype = wintypes.HANDLE
+    close = ctypes.windll.kernel32.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    def lock(path):
+        handle = create(str(path),0x80000000,0,None,3,0,None)
         assert handle != ctypes.c_void_p(-1).value
+        return handle
+    identity = subprocess.check_output(['whoami','/user','/fo','csv','/nh'],text=True)
+    principal = '*'+next(row[1] for row in csv.reader(io.StringIO(identity)) if len(row)==2 and row[1].startswith('S-1-'))
+    def acl(path, deny):
+        command=['icacls',str(path),'/deny',principal+':(RD)'] if deny else ['icacls',str(path),'/remove:d',principal]
+        subprocess.run(command,check=True,capture_output=True,timeout=30)
+    result={}
+    with tempfile.TemporaryDirectory(prefix='fcr-failure-',dir=args.work) as temporary:
+        base=Path(temporary);project=base/'Project';project.mkdir()
+        nested=project/'Restricted';nested.mkdir()
+        document=nested/'report.docx';document.write_bytes(b'document')
+        (project/'readable.pdf').write_bytes(b'readable')
+        before=base/'A.fcrstate';after=base/'B.fcrstate'
+        def capture(output=after,workers=32):
+            return subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(output),'--workers',str(workers)],timeout=60).returncode
+        assert capture(before)==0
+        checksum=hashlib.sha256(before.read_bytes()).hexdigest()
+        for workers in (16,32):
+            handle=lock(document)
+            try:
+                assert capture(workers=workers)==0
+                state=app.load_snapshot(after)
+                assert state['read_error_count']==1 and state['read_errors'][0]['winerror'] in (None,32)
+                assert state['read_errors'][0]['errno']==13
+                assert state['read_errors'][0]['kind']=='file'
+                assert {row['Status'] for row in app.compare_snapshots(app.load_snapshot(before),state)}=={'Unknown','Unchanged'}
+            finally:close(handle)
+        result['exclusive_file_lock_partial_unknown_16_32']=True
+        assert capture()==0 and app.load_snapshot(after)['complete']
+        result['retry_after_unlock_complete']=True
+        acl(nested,True)
         try:
-            assert subprocess.run(command,timeout=60).returncode == 1
-        finally:
-            close(handle)
-        assert hashlib.sha256(output.read_bytes()).hexdigest() == checksum
+            assert capture()==0
+            state=app.load_snapshot(after)
+            assert state['read_error_count']==1 and state['read_errors'][0]['winerror']==5, (state['file_count'],state['read_errors'])
+            assert state['read_errors'][0]['kind']=='directory'
+            assert {row['Status'] for row in app.compare_snapshots(app.load_snapshot(before),state)}=={'Unknown','Unchanged'}
+            report=base/'Partial.xlsx'
+            subprocess.run([str(args.exe),'compare','--before',str(before),'--after',str(after),'--output',str(report)],check=True,timeout=60)
+            # Both source and frozen runtime honor the same denied folder.
+            source=app.create_snapshot(project,base/'source.fcrstate',16)
+            assert source['files']==state['files'] and source['read_errors']==state['read_errors']
+            app.compare_files(before,base/'source.fcrstate',base/'Partial-source.xlsx')
+            from windows_build.verify import normalized_workbook
+            assert normalized_workbook(report)==normalized_workbook(base/'Partial-source.xlsx')
+        finally:acl(nested,False)
+        result['acl_denied_subfolder_partial_unknown']=True
+        assert capture()==0 and app.load_snapshot(after)['complete']
+        result['retry_after_restoring_fixture_acl_complete']=True
+        acl(project,True)
+        try:
+            assert capture(before)==1
+        finally:acl(project,False)
+        assert hashlib.sha256(before.read_bytes()).hexdigest()==checksum
+        result['acl_denied_root_aborts_preserves_state']=True
+        handle=lock(before)
+        try:assert capture(before)==1
+        finally:close(handle)
+        assert hashlib.sha256(before.read_bytes()).hexdigest()==checksum
+        result['locked_output_aborts_preserves_state']=True
+        # Excluded Office/temp files never need to be opened.
+        excluded=project/'~$office.docx';excluded.write_bytes(b'lock')
+        handle=lock(excluded)
+        try:assert capture()==0 and app.load_snapshot(after)['complete']
+        finally:close(handle)
+        result['excluded_locked_file_does_not_affect_capture']=True
         assert not list(base.glob('.folder-change-review-*'))
-        subprocess.run(command,check=True,timeout=60)
-    result = {'locked_file_aborts':True,'previous_state_preserved':True,'staging_cleaned':True,'retry_after_unlock_succeeds':True}
+        result['staging_cleaned']=True
+        # Leave only generic aggregate results; fixture and paths are removed.
     (args.work/'failure-acceptance.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     print(json.dumps(result))
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__main__':main()

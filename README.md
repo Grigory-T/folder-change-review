@@ -50,12 +50,38 @@ States store compressed relative paths, sizes and internal SHA-256 digests. Each
 file is read fully. ZIP/RAR/7z files are ordinary files, never expanded.
 Case-insensitive filename exclusions: `~*`, `Thumbs.db`, `*.tmp`, `*.temp`.
 Empty directories are irrelevant. Links, junctions and other reparse points
-are skipped and their count is reported. Other read/enumeration failures abort
-the snapshot, preserving an existing output. Basic file-change detection during
-hashing reads only the initial file size plus a one-byte growth probe, and
-rejects premature EOF or observed size, modification-time, change-time and
-identity changes. A continuously growing file is not read indefinitely. A live
-scan is not an atomic point-in-time filesystem snapshot.
+are skipped and their count is reported.
+
+Unreadable subfolders, locked files, interrupted directory enumeration and files
+that change while hashing produce **read issues**. Capture continues and saves
+readable files with explicit incomplete coverage. The UI shows the issue count
+and a **Read issues…** button; state choices also identify incomplete captures.
+No permissions are changed and administrator access is not required for normal
+operation. A completely unavailable or unreadable root still fails capture.
+
+Comparison uses **Unknown** when either state cannot establish a file's status.
+Unknown rows have blank Added/Deleted/Changed flags, retain any known size, and
+still have `last=1`. An unreadable folder never becomes a fake file row. If both
+states cannot enumerate a folder, its filenames may be unknown to both: the
+warning remains even if there are zero Unknown rows. Do not treat `last` as a
+complete project file count when coverage is incomplete.
+
+Reports with read issues contain a warning above the main data and a plain
+**Read issues** worksheet with the affected state, path and OS reason. Reports
+with complete coverage retain the existing single-sheet layout. Actual additions
+and deletions outside unavailable scopes are still classified normally.
+
+Output errors (including disk full, a locked report or unwritable storage) abort
+and preserve the previous destination. Files are hashed up to their initial size
+plus one growth probe; short reads accumulate, while growth, truncation or
+observed metadata/identity changes become read issues. Each file is attempted
+once: capture never keeps retrying a changing or locked file. A live scan is not
+an atomic point-in-time filesystem snapshot. Network I/O timeouts are controlled
+by Windows and the SMB connection.
+
+New states use format version 3 with compressed relative file records and a
+separate read-issue inventory. This version reads earlier complete states.
+Older EXEs reject version 3 instead of silently ignoring its coverage warnings.
 
 Comparison reads only saved states; the original project need not be online.
 No same-root check is performed. Choose two states of the same project using
@@ -85,7 +111,7 @@ run from hierarchy/depth through adjacent names, extension, Size A/B, Status
 and Added/Deleted/Changed flags, ending with `last`. Headers and the title are
 English; filenames and paths retain their original text.
 
-The full union includes Added, Deleted, Changed and Unchanged files. Flags
+The full union includes Added, Deleted, Changed, Unchanged and, when coverage is incomplete, Unknown files. Flags
 `Added`, `Deleted`, `Changed` use numeric 1 or an empty cell, never zero.
 `last=1` counts all file rows. No Leaf flag or SHA column is exported: hashes
 remain in machine snapshots solely for change detection. Extensions have no dot.

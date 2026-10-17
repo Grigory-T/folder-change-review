@@ -13,6 +13,8 @@ def main():
     parser.add_argument('--added', type=int, required=True)
     parser.add_argument('--deleted', type=int, required=True)
     parser.add_argument('--changed', type=int, required=True)
+    parser.add_argument('--unknown', type=int, default=0)
+    parser.add_argument('--read-issues', type=int, default=0)
     parser.add_argument('--changed-file', help='Expected filename in a single changed-file drill-down')
     parser.add_argument('--expect-file', action='append', default=[], help='Filename whose exact native Excel text must be present')
     parser.add_argument('--receipt', type=Path, required=True)
@@ -30,7 +32,12 @@ def main():
                                     ReadOnly=True, AddToMru=False, CorruptLoad=0)
         opened = time.perf_counter() - started
         sheet = book.Worksheets('Changes')
-        assert book.FileFormat == 51 and book.ReadOnly and book.Worksheets.Count == 1
+        assert book.FileFormat == 51 and book.ReadOnly and book.Worksheets.Count == (2 if args.read_issues else 1)
+        if args.read_issues:
+            assert 'Incomplete coverage' in sheet.Cells(3,2).Value
+            issues = book.Worksheets('Read issues')
+            assert issues.AutoFilter.Range.Rows.Count == args.read_issues+1
+            assert issues.ListObjects.Count == 0 and issues.UsedRange.HasFormula is False
         assert sheet.ListObjects.Count == 0 and sheet.UsedRange.HasFormula is False
         assert sheet.Hyperlinks.Count == 0
         source = sheet.AutoFilter.Range
@@ -71,6 +78,11 @@ def main():
         if args.expect_file:
             names = {row[0] for row in column_values(headers.index('File name')+2)}
             assert set(args.expect_file) <= names, (args.expect_file,names)
+        statuses = column_values(headers.index('Status')+2)
+        assert sum(row[0]=='Unknown' for row in statuses)==args.unknown
+        for name in ('Added','Deleted','Changed'):
+            values = column_values(headers.index(name)+2)
+            assert all(value[0] is None for status,value in zip(statuses,values) if status[0]=='Unknown')
         started = time.perf_counter()
         expected = {'Added':args.added,'Deleted':args.deleted,'Changed':args.changed,'last':args.rows}
         actual = {}
@@ -95,6 +107,7 @@ def main():
         result = {'normal_excel_open':True,'rows':args.rows,'plain_data_format':True,
                   'pivot_sums':actual if args.rows else None,'changed_file_drilldown':bool(args.changed_file),
                   'open_seconds':round(opened,3),'pivot_seconds':round(elapsed,3)}
+        result.update(unknown=args.unknown,read_issues=args.read_issues)
         book.Close(SaveChanges=False); book = None
         assert hashlib.sha256(args.report.read_bytes()).hexdigest() == checksum
         args.receipt.write_text(json.dumps(result,indent=2,ensure_ascii=False),encoding='utf-8')

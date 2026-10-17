@@ -140,7 +140,7 @@ class BoundedHashingTests(unittest.TestCase):
                             with self.assertRaisesRegex(OSError,'changed while'):
                                 app.hash_file(self.path)
 
-    def test_mutation_aborts_capture_preserves_state_and_cleans_staging(self):
+    def test_mutation_creates_incomplete_state_and_cleans_staging(self):
         stream = self.controlled(b'original data', after_read=lambda item:item.append(b'growth'))
         output = self.work/'previous.fcrstate'
         output.write_bytes(b'previous state')
@@ -148,9 +148,11 @@ class BoundedHashingTests(unittest.TestCase):
         def input_stream(path, *args, **kwargs):
             return stream if app.absolute(path) == app.absolute(self.path) else real_open(path,*args,**kwargs)
         with patch.object(app,'open',side_effect=input_stream,create=True), contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(OSError,'changed while'):
-                app.create_snapshot(self.root,output,workers=1)
-        self.assertEqual(output.read_bytes(),b'previous state')
+            snapshot = app.create_snapshot(self.root,output,workers=1)
+        self.assertFalse(snapshot['complete'])
+        self.assertEqual(snapshot['read_errors'][0]['kind'], 'file')
+        self.assertIn('changed while', snapshot['read_errors'][0]['message'])
+        self.assertEqual(app.load_snapshot(output), snapshot)
         self.assertEqual(list(self.work.glob('.folder-change-review-*')),[])
 
     def test_read_error_is_propagated(self):

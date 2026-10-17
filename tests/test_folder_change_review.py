@@ -160,7 +160,7 @@ class FolderChangeReviewTests(unittest.TestCase):
         (self.root / "file.pdf").write_bytes(b"data")
         output = self.work / "A.fcrstate"
         output.write_bytes(b"previous snapshot")
-        with patch.object(app, "hash_file", side_effect=PermissionError("unreadable")):
+        with patch.object(app, "write_container", side_effect=PermissionError("unwritable output")):
             with self.assertRaises(PermissionError):
                 app.create_snapshot(self.root, output)
         self.assertEqual(output.read_bytes(), b"previous snapshot")
@@ -239,7 +239,7 @@ class FolderChangeReviewTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             state = app.create_snapshot(self.root, output)
         with zipfile.ZipFile(output) as archive:
-            self.assertEqual(set(archive.namelist()), {"metadata.json", "files.json"})
+            self.assertEqual(set(archive.namelist()), {"metadata.json", "files.json", "errors.json"})
             records = json.loads(archive.read("files.json"))
             self.assertEqual(records, [["report.pdf", 8, hashlib.sha256(b"document").hexdigest()]])
         self.assertEqual(app.load_snapshot(output), state)
@@ -296,6 +296,7 @@ class FolderChangeReviewTests(unittest.TestCase):
         with zipfile.ZipFile(bad, "w") as archive:
             archive.writestr("metadata.json", metadata)
             archive.writestr("files.json", json.dumps([["../escape", 1, "a" * 64]]))
+            archive.writestr("errors.json", "[]")
         with self.assertRaisesRegex(ValueError, "relative path"):
             app.load_snapshot(bad)
 

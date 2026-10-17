@@ -143,6 +143,29 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.assertFalse(self.app.capture_button.instate(['disabled']))
         self.dialog.assert_called_once()
 
+    def test_partial_capture_is_visible_and_comparison_marks_unknown(self):
+        self.states(1)
+        self.app.project.set(str(self.project))
+        with patch.object(core, 'hash_file', side_effect=PermissionError(13, 'Access denied', str(self.project/'file.pdf'))):
+            self.app.capture_button.invoke()
+            self.wait()
+        self.assert_idle()
+        self.assertEqual(len(self.app.items), 2)
+        self.assertIn('Incomplete coverage', self.app.capture_status.get())
+        self.assertIn('read issues', self.app.labels[0])
+        self.assertFalse(self.app.issues_button.instate(['disabled']))
+        self.app.selection_details()
+        self.assertIn('Incomplete coverage', self.app.compare_status.get())
+        self.app.issues_button.invoke()
+        dialogs = [widget for widget in self.window.winfo_children() if isinstance(widget, tk.Toplevel)]
+        self.assertEqual(len(dialogs), 1)
+        dialogs[0].destroy()
+        self.app.compare_button.invoke()
+        self.wait()
+        self.assert_idle()
+        self.assertIn('Unknown: 1', self.app.compare_status.get())
+        self.dialog.assert_not_called()
+
     def test_filesystem_validation_is_background_and_close_waits(self):
         entered, release = threading.Event(), threading.Event()
         main_thread = threading.get_ident()

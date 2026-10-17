@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import filedialog, messagebox, ttk
 
-from folder_change_review import DEFAULT_WORKERS, VERSION, compare_files, create_snapshot
+from folder_change_review import DEFAULT_WORKERS, VERSION, capture_error_message, compare_files, create_snapshot
 from runtime_safety import application_directory, inside, offline_runtime, open_application_folder, require_local
 from state_store import StateHistory, path_module
 
@@ -94,7 +94,10 @@ class Application:
         self.worker_box.pack(side='left')
         ttk.Label(options, text='16 by default; try 32 for an SMB share.', style='Muted.Card.TLabel').pack(side='left', padx=(12, 0))
         self.capture_button, self.capture_progress = self.action_row(capture, 4, self.capture_status, 'Create state', self.capture)
-        ttk.Label(capture, text='States are saved automatically. No state files to name or open.', style='Muted.Card.TLabel').grid(row=5, column=0, columnspan=3, sticky='w', pady=(2, 0))
+        ttk.Label(capture, text='States are saved automatically.', style='Muted.Card.TLabel').grid(row=5, column=0, columnspan=2, sticky='w', pady=(2, 0))
+        self.capture_issues = []
+        self.issues_button = ttk.Button(capture, text='Read issues…', width=ACTION_WIDTH, command=self.show_capture_issues)
+        self.issues_button.grid(row=5, column=2, sticky='e', pady=(2, 0))
 
         compare = self.card(cards, 1, '2', 'Compare saved states',
                             'Choose two captures. The project folder does not need to be online.', self.history_summary)
@@ -237,6 +240,8 @@ class Application:
             date = datetime.fromisoformat(meta['completed_utc']).astimezone()
             folder = path_module(meta['root']).basename(meta['root'].rstrip('\\/')) or meta['root']
             label = f"{date:%Y-%m-%d %H:%M:%S}.{date.microsecond // 1000:03d}  |  {folder}  |  {meta['file_count']:,} files"
+            if meta.get('read_error_count', 0):
+                label += f"  |  {meta['read_error_count']:,} read issues"
             duplicates[label] += 1
             self.labels.append(label if duplicates[label] == 1 else f'{label} ({duplicates[label]})')
         paths = [item['path'] for item in self.items]
@@ -269,6 +274,10 @@ class Application:
                 text = 'A is newer than B. Swap them for a forward comparison.'
             else:
                 text = 'Ready. The report will show changes from A to B.'
+            if a >= 0 and b >= 0 and a != b:
+                count = sum(self.items[index]['metadata'].get('read_error_count', 0) for index in (a, b))
+                if count:
+                    text += f'\nIncomplete coverage: {count:,} read issues. Affected files will be Unknown.'
             self.compare_status.set(text)
         self.enable()
 
@@ -278,6 +287,7 @@ class Application:
             control.configure(state=state)
         self.capture_button.configure(state='normal' if not self.busy and self.project.get().strip() else 'disabled')
         self.worker_box.configure(state='disabled' if self.busy else 'readonly')
+        self.issues_button.configure(state='normal' if self.capture_issues and not self.busy else 'disabled')
         for control in (self.before_box, self.after_box):
             control.configure(state='readonly' if not self.busy and self.items else 'disabled')
         a, b = self.before_box.current(), self.after_box.current()
@@ -295,6 +305,28 @@ class Application:
         except Exception as error:
             messagebox.showerror('Open report folder', str(error), parent=self.window)
 
+    def show_capture_issues(self):
+        if not self.capture_issues or self.busy:
+            return
+        dialog = tk.Toplevel(self.window)
+        dialog.title('Read issues — Folder Change Review')
+        dialog.geometry('820x420')
+        dialog.transient(self.window)
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        ttk.Label(dialog, text='This state has incomplete coverage. Affected files will be Unknown, not deleted.', wraplength=780).grid(row=0, column=0, sticky='w', padx=12, pady=12)
+        text = tk.Text(dialog, wrap='none', font=('Segoe UI', 10))
+        text.grid(row=1, column=0, sticky='nsew', padx=(12, 0))
+        scroll = ttk.Scrollbar(dialog, command=text.yview)
+        scroll.grid(row=1, column=1, sticky='ns', padx=(0, 12))
+        horizontal = ttk.Scrollbar(dialog, orient='horizontal', command=text.xview)
+        horizontal.grid(row=2, column=0, sticky='ew', padx=12)
+        text.configure(yscrollcommand=scroll.set, xscrollcommand=horizontal.set)
+        for issue in self.capture_issues:
+            text.insert('end', f"{issue['kind']}: {issue['path']}\n{issue['message']}\n\n")
+        text.configure(state='disabled')
+        ttk.Button(dialog, text='Close', command=dialog.destroy).grid(row=3, column=0, sticky='e', padx=12, pady=12)
+
     def start(self, kind, operation):
         if self.busy:
             return
@@ -309,7 +341,7 @@ class Application:
             try:
                 self.messages.put(('done', operation()))
             except Exception as error:
-                self.messages.put(('error', str(error)))
+                self.messages.put(('error', capture_error_message(error) if kind == 'state' else str(error)))
         try:
             threading.Thread(target=work, daemon=False).start()
         except Exception as error:
@@ -330,7 +362,11 @@ class Application:
             self.history.save_settings({'project': root, 'workers': workers})
             output = self.history.new_state_path()
             state = create_snapshot(root, output, workers, lambda text: self.messages.put(('progress', text)))
-            return 'state', f"State saved: {len(state['files']):,} files.", None
+            issues = state.get('read_errors', [])
+            message = f"State saved: {len(state['files']):,} files."
+            if issues:
+                message += f"\nIncomplete coverage: {len(issues):,} read issues. See Read issues."
+            return 'state', message, issues
         self.start('state', capture)
 
     def compare(self):
@@ -340,11 +376,15 @@ class Application:
         if a < 0 or b < 0 or a == b:
             return
         before, after = self.items[a]['path'], self.items[b]['path']
+        issue_count = sum(self.items[index]['metadata'].get('read_error_count', 0) for index in (a, b))
         output = self.history.new_report_path()
         self.compare_status.set('Comparing saved states and writing Excel…')
         def compare():
             counts = compare_files(before, after, output, lambda text: self.messages.put(('progress', text)))
-            return 'report', f"Added: {counts['Added']:,}   Deleted: {counts['Deleted']:,}   Changed: {counts['Changed']:,}\nUnchanged: {counts['Unchanged']:,}", output
+            message = f"Added: {counts['Added']:,}   Deleted: {counts['Deleted']:,}   Changed: {counts['Changed']:,}\nUnchanged: {counts['Unchanged']:,}   Unknown: {counts['Unknown']:,}"
+            if issue_count:
+                message += f"   Read issues: {issue_count:,}"
+            return 'report', message, output
         self.start('report', compare)
 
     def poll(self):
@@ -364,12 +404,15 @@ class Application:
                     progress.grid_remove()
                 self.refresh(select_latest=kind == 'done' and value[0] == 'state')
                 if kind == 'error':
-                    status.set('State was not saved. Try again.' if operation == 'state' else 'Report was not saved. Try again.')
+                    status.set('State was not saved. See the error details.' if operation == 'state' else 'Report was not saved. Try again.')
                     messagebox.showerror('Folder Change Review', value, parent=self.window)
                 else:
                     operation, message, output = value
                     status.set(message)
-                    if output:
+                    if operation == 'state':
+                        self.capture_issues = output or []
+                        self.enable()
+                    elif output:
                         self.report_name.set('Last report: ' + output.name)
         except queue.Empty:
             pass

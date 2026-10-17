@@ -116,6 +116,9 @@ def main():
             assert counts == {'Unchanged':1}
             subprocess.run([str(args.exe),'compare','--before',str(previous),'--after',str(current),'--output',str(frozen_report)],check=True,timeout=60)
             assert normalized_workbook(source_report) == normalized_workbook(frozen_report)
+            rejected = base/'old-runtime-must-not-export.xlsx'
+            assert subprocess.run([str(args.previous_exe),'compare','--before',str(current),'--after',str(current),'--output',str(rejected)],timeout=60).returncode == 1
+            assert not rejected.exists()
             comparisons.append({'case':'previous-release-state','rows':1,'all_workbook_members_equal':True})
         sentinel = base/'preserved.xlsx'; sentinel.write_bytes(b'previous output')
         broken = base/'broken.fcrstate'; broken.write_bytes(b'not a state')
@@ -135,7 +138,8 @@ def main():
         assert sentinel.read_bytes() == b'previous output'
         assert not (project/'inside.fcrstate').exists()
         assert not list(base.rglob('.folder-change-review-*'))
-    result = {'comparisons':comparisons,'matching_failure_cases':len(failures),'only_workbook_timestamps_normalized':True}
+    result = {'comparisons':comparisons,'matching_failure_cases':len(failures),'only_workbook_timestamps_normalized':True,
+              'older_runtime_rejects_current_state_format': bool(args.previous_exe)}
     (args.results/'parity.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     print(json.dumps(result,indent=2))
 

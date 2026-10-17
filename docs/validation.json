@@ -1,27 +1,31 @@
 {
-  "version": "0.4.0",
   "date": "2026-10-17",
   "platform": "Windows 11 x86-64",
   "python": "3.13.14",
   "pyinstaller": "6.22.0",
   "xlsxwriter": "3.2.9",
+  "version": "0.5.0",
   "unit_tests": {
-    "Linux_with_Xvfb": 37,
-    "Windows": 37
+    "Linux_with_Xvfb": 58,
+    "Windows": 58
   },
-  "core_tests": 26,
-  "real_Tk_workflow_tests": 11,
-  "exe_bytes": 12109030,
-  "exe_sha256": "a79070f5d914275745f491610b842124c0967b780a4c028e375c9f07bb6e54d5",
+  "core_tests": 46,
+  "real_Tk_workflow_tests": 12,
+  "exe_bytes": 12117305,
+  "exe_sha256": "fc18054a5638715deba49c5186d5cd86bde00881b5222d7460949535e69a7629",
   "embedded_project_code_matches_source": true,
   "embedded_code_filenames_relative": 390,
   "privacy_payloads_checked": 1348,
   "private_validation_data_published": false,
+  "state_format": 3,
+  "legacy_complete_states_readable": true,
+  "partial_coverage_explicit": true,
+  "unknown_change_flags_blank": true,
   "application_sources_sha256": {
-    "folder_change_review.py": "9e210bd7ddd8495b9d4370734a92a5ff5787bff9f80f1e735e4aa3d732da0afe",
-    "folder_change_review_ui.py": "5bcf361e42a36cc7b919073ab7ffedc924c6bcb8b0fa6821de16111aa5201337",
+    "folder_change_review.py": "79298dc2da816bdab359e5dbcb99d90696c0b37cef187e88f2440e8e246a123d",
+    "folder_change_review_ui.py": "441f6e5d1da3cfd17cfd254b15ca68c7693c22e9fac9217a07c48b99ebcd4a46",
     "runtime_safety.py": "c25169e4ff28ce4cd104951f757efc9a4cfae3cd9cadd75056baee463366181a",
-    "state_store.py": "888bd96df75e1f8ba844b0da4cff60e8b8123c626191b6a3eecced5d976af821"
+    "state_store.py": "29590754d5771ee9b0ec2bfa649d0255e01cb25299c3dd48773fb55a249eccf6"
   },
   "parity": {
     "comparisons": [
@@ -104,9 +108,22 @@
       }
     ],
     "matching_failure_cases": 7,
-    "only_workbook_timestamps_normalized": true
+    "only_workbook_timestamps_normalized": true,
+    "older_runtime_rejects_current_state_format": true
+  },
+  "native_failure_recovery": {
+    "exclusive_file_lock_partial_unknown_16_32": true,
+    "retry_after_unlock_complete": true,
+    "acl_denied_subfolder_partial_unknown": true,
+    "retry_after_restoring_fixture_acl_complete": true,
+    "acl_denied_root_aborts_preserves_state": true,
+    "locked_output_aborts_preserves_state": true,
+    "excluded_locked_file_does_not_affect_capture": true,
+    "staging_cleaned": true
   },
   "native_gui_and_excel": {
+    "gui_partial_capture": true,
+    "gui_read_issues_dialog": true,
     "gui_create_two_states": true,
     "gui_choose_nondefault_states": true,
     "report_beside_exe": true,
@@ -118,12 +135,173 @@
       "Changed": 1.0,
       "last": 6.0
     },
-    "report_unchanged": true
+    "report_unchanged": true,
+    "excel_partial_report_normal_open": true,
+    "unknown_count": 1,
+    "unknown_pivot_drilldown": true
   },
-  "rendered_UI_review": {
-    "default_window": true,
-    "small_scrolled_window": true,
-    "idle_indicators_hidden": true
+  "desktop_candidate": {
+    "elevated": false,
+    "timings": [
+      {
+        "case": "A-exe16",
+        "seconds": 15.489,
+        "exit": 0
+      },
+      {
+        "case": "B-exe32",
+        "seconds": 15.506,
+        "exit": 0
+      },
+      {
+        "case": "B-source32",
+        "seconds": 14.501,
+        "exit": 0
+      },
+      {
+        "case": "compare-exe",
+        "seconds": 15.859,
+        "exit": 0
+      },
+      {
+        "case": "compare-source",
+        "seconds": 14.625,
+        "exit": 0
+      }
+    ],
+    "files_A": 83222,
+    "files_B": 83222,
+    "bytes_A": 17293249259,
+    "bytes_B": 17293249258,
+    "union_rows": 83224,
+    "counts": {
+      "Unchanged": 83219,
+      "Added": 2,
+      "Changed": 1,
+      "Deleted": 2
+    },
+    "controlled_counts": {
+      "Added": 2,
+      "Deleted": 2,
+      "Changed": 1,
+      "Unchanged": 1
+    },
+    "incidental_changes": 0,
+    "source_exe_records_equal": true,
+    "source_exe_workbook_equal": true,
+    "read_errors_A": 7,
+    "read_errors_B": 7,
+    "coverage_complete": false,
+    "excluded": 16,
+    "skipped_links": 2,
+    "state_bytes": 4321583
   },
-  "byte_identical_clean_rebuild": true
+  "desktop_excel": {
+    "normal_excel_open": true,
+    "rows": 83224,
+    "plain_data_format": true,
+    "pivot_sums": {
+      "Added": 2.0,
+      "Deleted": 2.0,
+      "Changed": 1.0,
+      "last": 83224.0
+    },
+    "changed_file_drilldown": true,
+    "open_seconds": 1.876,
+    "pivot_seconds": 0.893,
+    "unknown": 0,
+    "read_issues": 14
+  },
+  "final_exe_access_coverage": {
+    "elevated_files": 83592,
+    "normal_files": 83222,
+    "elevated_read_issues": 0,
+    "normal_read_issues": 7,
+    "restricted_known_files": 374,
+    "all_restricted_files_unknown": true,
+    "counts": {
+      "Unchanged": 83218,
+      "Added": 4,
+      "Unknown": 374
+    },
+    "seconds": 32.777
+  },
+  "final_exe_SMB": {
+    "dataset": "synthetic",
+    "storage": "SMB",
+    "files": 5000,
+    "captures": [
+      {
+        "delivery": "Python",
+        "workers": 16,
+        "seconds": 8.837
+      },
+      {
+        "delivery": "EXE",
+        "workers": 16,
+        "seconds": 10.167,
+        "scan_hash_seconds": 8.01
+      },
+      {
+        "delivery": "EXE",
+        "workers": 32,
+        "seconds": 8.282,
+        "scan_hash_seconds": 6.697
+      },
+      {
+        "delivery": "EXE",
+        "workers": 16,
+        "seconds": 9.423,
+        "scan_hash_seconds": 7.893
+      },
+      {
+        "delivery": "EXE",
+        "workers": 32,
+        "seconds": 8.216,
+        "scan_hash_seconds": 6.648
+      }
+    ],
+    "bytes": 327698890,
+    "state_bytes": 239809,
+    "legacy_json_bytes": 1367212,
+    "compare_export_seconds": 2.464,
+    "counts": {
+      "Changed": 1,
+      "Unchanged": 4997,
+      "Deleted": 2,
+      "Added": 2
+    },
+    "source_exe_records_equal": true,
+    "compare_without_source": true,
+    "input_write_rejected": true
+  },
+  "byte_identical_clean_rebuild": true,
+  "final_Downloads_exe": {
+    "admin": false,
+    "files": 83218,
+    "read_issues": 7,
+    "capture_seconds": 15.58,
+    "counts": {
+      "Unchanged": 83218,
+      "Unknown": 374
+    },
+    "final_downloads_exe_success": true
+  },
+  "final_coverage_excel": {
+    "normal_excel_open": true,
+    "rows": 83592,
+    "plain_data_format": true,
+    "pivot_sums": {
+      "Added": null,
+      "Deleted": null,
+      "Changed": null,
+      "last": 83592.0
+    },
+    "changed_file_drilldown": false,
+    "open_seconds": 1.824,
+    "pivot_seconds": 0.722,
+    "unknown": 374,
+    "read_issues": 7
+  },
+  "final_Downloads_checksum_verified": true
 }
