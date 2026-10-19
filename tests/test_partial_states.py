@@ -26,7 +26,7 @@ class PartialStateTests(unittest.TestCase):
             (self.root/directory).mkdir()
             (self.root/directory/'report.pdf').write_bytes(b'document')
         with contextlib.redirect_stdout(io.StringIO()):
-            self.complete = app.create_snapshot(self.root, self.base/'A.fcrstate', 1)
+            self.complete = app.create_snapshot(self.root, self.base/'A.fcrstate', 1, mode="full")
 
     def partial(self, kind='directory', area='Area'):
         state = copy.deepcopy(self.complete)
@@ -107,7 +107,7 @@ class PartialStateTests(unittest.TestCase):
                 raise PermissionError(13,'Denied',str(self.root))
             return original_scandir(path)
         with patch.object(app.os,'scandir',side_effect=denied):
-            with self.assertRaises(OSError): app.create_snapshot(self.root,output,1)
+            with self.assertRaises(OSError): app.create_snapshot(self.root,output,1, mode="full")
         self.assertEqual(output.read_bytes(), original)
 
     def test_old_formats_still_load_but_partial_format_cannot_be_downgraded(self):
@@ -165,7 +165,7 @@ class PartialStateTests(unittest.TestCase):
             Path(path).write_bytes(b'incomplete output')
             raise OSError(28,'No space left on device')
         with patch.object(app,'write_container',side_effect=disk_full):
-            with self.assertRaises(OSError):app.create_snapshot(self.root,output,32)
+            with self.assertRaises(OSError):app.create_snapshot(self.root,output,32, mode="full")
         self.assertEqual(output.read_bytes(),original)
         self.assertEqual(list(self.base.glob('.folder-change-review-*')),[])
 

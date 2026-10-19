@@ -29,7 +29,7 @@ class FolderChangeReviewTests(unittest.TestCase):
 
     def snapshot(self, name):
         with contextlib.redirect_stdout(io.StringIO()):
-            return app.create_snapshot(self.root, self.work / name)
+            return app.create_snapshot(self.root, self.work / name, mode="full")
 
     def test_snapshot_exclusions_archives_and_empty_folders(self):
         for name in ("~note.docx", "~$lock.docx", "THUMBS.DB", "scratch.TMP", "scratch.TeMp"):
@@ -166,7 +166,7 @@ class FolderChangeReviewTests(unittest.TestCase):
         output.write_bytes(b"previous snapshot")
         with patch.object(app, "write_container", side_effect=PermissionError("unwritable output")):
             with self.assertRaises(PermissionError):
-                app.create_snapshot(self.root, output)
+                app.create_snapshot(self.root, output, mode="full")
         self.assertEqual(output.read_bytes(), b"previous snapshot")
 
     def test_failed_report_preserves_output_and_cleans_staging(self):
@@ -182,13 +182,13 @@ class FolderChangeReviewTests(unittest.TestCase):
 
     def test_no_same_root_check_and_in_project_state_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "outside"):
-            app.create_snapshot(self.root, self.root / "A.fcrstate")
+            app.create_snapshot(self.root, self.root / "A.fcrstate", mode="full")
         self.assertFalse((self.root / "A.fcrstate").exists())
         before = self.snapshot("A.fcrstate")
         other = self.work / "different-project"
         other.mkdir()
         with contextlib.redirect_stdout(io.StringIO()):
-            app.create_snapshot(other, self.work / "B.fcrstate")
+            app.create_snapshot(other, self.work / "B.fcrstate", mode="full")
             counts = app.compare_files(self.work / "A.fcrstate", self.work / "B.fcrstate", self.work / "empty.xlsx")
         self.assertEqual(sum(counts.values()), 0)
         self.assertEqual(before["files"], [])
@@ -232,9 +232,9 @@ class FolderChangeReviewTests(unittest.TestCase):
         for index in range(17):
             (self.root / f"file-{index}.pdf").write_bytes(bytes([index]) * (index + 1))
         with contextlib.redirect_stdout(io.StringIO()):
-            serial = app.create_snapshot(self.root, self.work / "serial.fcrstate", workers=1)
+            serial = app.create_snapshot(self.root, self.work / "serial.fcrstate", workers=1, mode="full")
             for workers in (16, 32):
-                parallel = app.create_snapshot(self.root, self.work / "parallel.fcrstate", workers=workers)
+                parallel = app.create_snapshot(self.root, self.work / "parallel.fcrstate", workers=workers, mode="full")
                 self.assertEqual(serial["files"], parallel["files"])
 
     def test_machine_state_compact_roundtrip_and_metadata_only_history(self):
@@ -242,11 +242,11 @@ class FolderChangeReviewTests(unittest.TestCase):
         history = StateHistory(self.work)
         output = history.new_state_path()
         with contextlib.redirect_stdout(io.StringIO()):
-            state = app.create_snapshot(self.root, output)
+            state = app.create_snapshot(self.root, output, mode="full")
         with zipfile.ZipFile(output) as archive:
             self.assertEqual(set(archive.namelist()), {"metadata.json", "files.json", "errors.json"})
             records = json.loads(archive.read("files.json"))
-            self.assertEqual(records, [["report.pdf", 8, hashlib.sha256(b"document").hexdigest()]])
+            self.assertEqual(records, [["report.pdf", 8, hashlib.sha256(b"document").hexdigest(), state["files"][0]["mtime_ns"]]])
         self.assertEqual(app.load_snapshot(output), state)
         self.assertEqual(read_metadata(output)["file_count"], 1)
         # Chooser does not decompress the inventory or need the project online.
@@ -265,7 +265,7 @@ class FolderChangeReviewTests(unittest.TestCase):
         history = StateHistory(self.work)
         valid = history.new_state_path()
         with contextlib.redirect_stdout(io.StringIO()):
-            app.create_snapshot(self.root, valid)
+            app.create_snapshot(self.root, valid, mode="full")
         history.new_state_path().write_bytes(b"broken")
         with zipfile.ZipFile(history.new_state_path(), "w") as archive:
             archive.writestr("metadata.json", "[]")
@@ -283,7 +283,7 @@ class FolderChangeReviewTests(unittest.TestCase):
             self.assertLessEqual(len(pending), 64)
             return real_wait(pending, **kwargs)
         with patch.object(app, "wait", checked_wait), contextlib.redirect_stdout(io.StringIO()):
-            state = app.create_snapshot(self.root, self.work / "bounded.fcrstate", 32)
+            state = app.create_snapshot(self.root, self.work / "bounded.fcrstate", 32, mode="full")
         self.assertEqual(len(state["files"]), 193)
         self.assertEqual(max(observed), 64)
 
@@ -300,7 +300,7 @@ class FolderChangeReviewTests(unittest.TestCase):
             metadata = archive.read("metadata.json")
         with zipfile.ZipFile(bad, "w") as archive:
             archive.writestr("metadata.json", metadata)
-            archive.writestr("files.json", json.dumps([["../escape", 1, "a" * 64]]))
+            archive.writestr("files.json", json.dumps([["../escape", 1, "a" * 64, 0]]))
             archive.writestr("errors.json", "[]")
         with self.assertRaisesRegex(ValueError, "relative path"):
             app.load_snapshot(bad)

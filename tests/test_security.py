@@ -45,8 +45,8 @@ class SecurityTests(unittest.TestCase):
                         operation()
                 self.assertFalse(app.inside(tempfile.gettempdir(), root))
             with contextlib.redirect_stdout(io.StringIO()):
-                app.create_snapshot(root, base/'A.fcrstate')
-                app.create_snapshot(root, base/'B.fcrstate')
+                app.create_snapshot(root, base/'A.fcrstate', mode="full")
+                app.create_snapshot(root, base/'B.fcrstate', mode="full")
                 app.compare_files(base/'A.fcrstate', base/'B.fcrstate', root/app.OUTPUT_FILE)
             self.assertEqual(hashlib.sha256(doc.read_bytes()).hexdigest(), initial)
             self.assertEqual({p.name for p in root.iterdir()},
@@ -57,5 +57,5 @@ class SecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder); doc = root/'Business.pdf'; doc.write_bytes(b'keep')
             with self.assertRaisesRegex(ValueError, 'fcrstate'):
-                app.create_snapshot(root, doc)
+                app.create_snapshot(root, doc, mode="full")
             self.assertEqual(doc.read_bytes(), b'keep')

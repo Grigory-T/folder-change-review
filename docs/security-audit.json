@@ -1,170 +1,116 @@
 {
-  "version": "0.7.0",
-  "date": "2026-10-17",
-  "scope": "Application code, production artifact, build inputs, public history and release assets. Not an OS sandbox or proof of absence of every vulnerability.",
+  "version": "0.8.0",
+  "date": "2026-10-19",
+  "scope": "Performance modes with unchanged local-runtime, offline and read-only safeguards. No new runtime dependency.",
   "runtime": {
-    "no_telemetry_update_or_download_code": true,
     "Python_network_and_process_APIs_blocked": true,
     "supported_remote_filesystem": "SMB",
-    "local_execution_history_and_workspaces": true,
-    "document_content_hash_preserved_in_workflow_test": true,
-    "state_output_extension_guard": true,
-    "observed_GUI_application_TCP_connections": 0,
-    "project_content_read_only_except_selected_report_and_staging": true,
-    "managed_states_settings_outside_project": true,
-    "legacy_state_import_preserves_originals": true,
-    "processing_storage_independent_of_report_folder": true
+    "local_history_and_workspaces": true,
+    "project_read_only_except_report_and_staging": true,
+    "native_GUI_application_TCP_connections": 0,
+    "quick_content_reads": 0
   },
   "supply_chain": {
-    "package_advisory_tool": "pip-audit 2.10.1",
-    "package_advisory_service": "PyPI advisory database",
-    "package_advisory_result": {
-      "dependencies": [
-        {
-          "name": "altgraph",
-          "version": "0.17.5",
-          "vulns": []
-        },
-        {
-          "name": "packaging",
-          "version": "26.3",
-          "vulns": []
-        },
-        {
-          "name": "pefile",
-          "version": "2024.8.26",
-          "vulns": []
-        },
-        {
-          "name": "pyinstaller",
-          "version": "6.22.3",
-          "vulns": []
-        },
-        {
-          "name": "pyinstaller-hooks-contrib",
-          "version": "2026.8",
-          "vulns": []
-        },
-        {
-          "name": "pywin32-ctypes",
-          "version": "0.2.3",
-          "vulns": []
-        },
-        {
-          "name": "setuptools",
-          "version": "84.0.0",
-          "vulns": []
-        },
-        {
-          "name": "xlsxwriter",
-          "version": "3.2.9",
-          "vulns": []
-        },
-        {
-          "name": "openpyxl",
-          "version": "3.1.5",
-          "vulns": []
-        },
-        {
-          "name": "et-xmlfile",
-          "version": "2.0.0",
-          "vulns": []
-        },
-        {
-          "name": "pip",
-          "version": "26.2.1",
-          "vulns": []
-        }
-      ],
-      "fixes": []
+    "all_native_payloads_match_pinned_python": true,
+    "native_payload_count": 23,
+    "new_runtime_dependencies": [],
+    "dependency_advisories": {
+      "tool": "pip-audit 2.10.1",
+      "service": "PyPI advisory database",
+      "result": {
+        "dependencies": [
+          {
+            "name": "altgraph",
+            "version": "0.17.5",
+            "vulns": []
+          },
+          {
+            "name": "packaging",
+            "version": "26.3",
+            "vulns": []
+          },
+          {
+            "name": "pefile",
+            "version": "2024.8.26",
+            "vulns": []
+          },
+          {
+            "name": "pyinstaller",
+            "version": "6.22.3",
+            "vulns": []
+          },
+          {
+            "name": "pyinstaller-hooks-contrib",
+            "version": "2026.8",
+            "vulns": []
+          },
+          {
+            "name": "pywin32-ctypes",
+            "version": "0.2.3",
+            "vulns": []
+          },
+          {
+            "name": "setuptools",
+            "version": "84.0.0",
+            "vulns": []
+          },
+          {
+            "name": "xlsxwriter",
+            "version": "3.2.9",
+            "vulns": []
+          },
+          {
+            "name": "openpyxl",
+            "version": "3.1.5",
+            "vulns": []
+          },
+          {
+            "name": "et-xmlfile",
+            "version": "2.0.0",
+            "vulns": []
+          },
+          {
+            "name": "pip",
+            "version": "26.2.1",
+            "vulns": []
+          }
+        ],
+        "fixes": []
+      }
     },
-    "native_Dll_Pyd_files": 23,
-    "all_native_payloads_match_verified_Python": true,
-    "production_XML_parser_excluded": true,
-    "upgraded_Python": "3.13.16",
-    "upgraded_PyInstaller": "6.22.3",
-    "OpenSSL_version": "3.5.9",
-    "zlib_version": "1.3.2",
-    "Tcl_Tk_version": "8.6.15",
     "antivirus": {
-      "scan_time_utc": "2026-10-17T17:47:30.5741205Z",
+      "engine_version": "1.1.26090.9",
       "exit_code": 0,
-      "sha256": "fa1037adea2846404a4e34db94fa5996f382cb849c2409600ac2d60160f39a64",
-      "no_external_upload_requested": true,
-      "signature_updated_utc": "2026-10-17T02:15:35.0000000Z",
-      "signature_version": "1.461.67.0",
-      "engine": "Microsoft Defender"
+      "file_contents_unchanged": true,
+      "passed": true,
+      "scan_type": "Custom file scan, remediation disabled",
+      "signature_updated_utc": "2026-10-18T00:31:20.0000000Z",
+      "authenticode_status": "NotSigned",
+      "signature_version": "1.461.84.0",
+      "limits": "A clean antivirus result does not prove absence of unknown threats.",
+      "provider": "Microsoft Defender Antivirus",
+      "executable_sha256": "27f289dc58dc2e98358c79f331f121ec62b545096a6b906e670659b9272293aa",
+      "checked_at_utc": "2026-10-19T08:18:14.4303441Z"
     }
   },
   "reproducibility": {
-    "separate_directory_rebuild_identical": true,
-    "sha256": "fa1037adea2846404a4e34db94fa5996f382cb849c2409600ac2d60160f39a64",
-    "exe_bytes": 11954673
+    "fresh_interpreters": true,
+    "sha256": "27f289dc58dc2e98358c79f331f121ec62b545096a6b906e670659b9272293aa",
+    "separate_directories": true,
+    "exe_bytes": 11960606,
+    "byte_identical": true
   },
   "privacy": {
-    "historical_public_blobs_checked": 77,
-    "historical_public_blob_private_matches": 0,
-    "current_source_tree_private_matches": 0,
-    "public_issues": 0,
-    "public_pull_requests": 0,
-    "Actions_artifacts": 0,
-    "release_asset_scan": {
-      "release_assets": [
-        {
-          "release": "v030",
-          "sha256": "c5311c507e1c342c2758b3e00e809bceff95254f179ed2501652f20808c2c234",
-          "payloads_checked": 1347,
-          "private_token_matches": 0
-        },
-        {
-          "release": "v031",
-          "sha256": "6328da5914fa0e5accc840047cd6e84da097fbfdc6dec77c51edad40703e8ce7",
-          "payloads_checked": 1347,
-          "private_token_matches": 0
-        },
-        {
-          "release": "v040",
-          "sha256": "a79070f5d914275745f491610b842124c0967b780a4c028e375c9f07bb6e54d5",
-          "payloads_checked": 1348,
-          "private_token_matches": 0
-        },
-        {
-          "release": "v050",
-          "sha256": "fc18054a5638715deba49c5186d5cd86bde00881b5222d7460949535e69a7629",
-          "payloads_checked": 1348,
-          "private_token_matches": 0
-        },
-        {
-          "release": "v060",
-          "sha256": "5028105a596a64bb392d601419adf9b5c3f016c43de149ed85e4390edadfa1bc",
-          "payloads_checked": 1348,
-          "private_token_matches": 0
-        },
-        {
-          "release": "v070",
-          "sha256": "fa1037adea2846404a4e34db94fa5996f382cb849c2409600ac2d60160f39a64",
-          "payloads_checked": 1349,
-          "private_token_matches": 0
-        }
-      ]
-    },
-    "private_inventories_screenshots_logs_published": false,
-    "upstream_legal_attribution_retained": true
+    "public_source_review_no_private_identifiers": true,
+    "published_receipts_aggregate_only": true,
+    "public_files_checked": 63,
+    "embedded_payloads_checked": 1349,
+    "private_identifier_matches": 0
   },
-  "licensing": {
-    "application": "MIT",
-    "third_party_notices_embedded": true,
-    "notice_provenance": "licenses/SOURCES.json",
-    "overview": "THIRD-PARTY-NOTICES.md"
-  },
-  "delivery": {
-    "exe_checksum_verified": true,
-    "report_replaced": false,
-    "exe_bytes": 11954673,
-    "existing_open_report_preserved": true,
-    "legacy_history_bytes_and_mtimes_preserved": true,
-    "legacy_states_copied_to_local_cache": true,
-    "settings_preserved": true,
-    "history_outside_project_by_default": true
-  }
+  "limits": [
+    "Not an operating-system sandbox or firewall.",
+    "Defender and advisory checks cannot prove absence of unknown threats.",
+    "Executable is unsigned.",
+    "Input projects are not sent to GitHub or any web service."
+  ]
 }

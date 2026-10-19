@@ -10,7 +10,7 @@ Build-time internet access is separate from the offline application runtime.
    ```powershell
    git clone https://github.com/Grigory-T/folder-change-review.git
    cd folder-change-review
-   git checkout v0.7.0
+   git checkout v0.8.0
    .\BUILD-EXE.bat
    ```
 

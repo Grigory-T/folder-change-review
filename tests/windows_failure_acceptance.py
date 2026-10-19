@@ -47,8 +47,8 @@ def main():
         document=nested/'report.docx';document.write_bytes(b'document')
         (project/'readable.pdf').write_bytes(b'readable')
         before=base/'A.fcrstate';after=base/'B.fcrstate'
-        def capture(output=after,workers=32):
-            return subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(output),'--workers',str(workers)],timeout=60).returncode
+        def capture(output=after,workers=32,mode='full'):
+            return subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(output),'--workers',str(workers),'--mode',mode],timeout=60).returncode
         assert capture(before)==0
         checksum=hashlib.sha256(before.read_bytes()).hexdigest()
         for workers in (16,32):
@@ -74,7 +74,7 @@ def main():
             report=base/'Partial.xlsx'
             subprocess.run([str(args.exe),'compare','--before',str(before),'--after',str(after),'--output',str(report)],check=True,timeout=60)
             # Both source and frozen runtime honor the same denied folder.
-            source=app.create_snapshot(project,base/'source.fcrstate',16)
+            source=app.create_snapshot(project,base/'source.fcrstate',16,mode='full')
             assert source['files']==state['files'] and source['read_errors']==state['read_errors']
             app.compare_files(before,base/'source.fcrstate',base/'Partial-source.xlsx')
             from windows_build.verify import normalized_workbook
@@ -110,6 +110,35 @@ def main():
         try:assert capture()==0 and app.load_snapshot(after)['complete']
         finally:close(handle)
         result['excluded_locked_file_does_not_affect_capture']=True
+        # Quick review intentionally does not open a content-locked file.
+        quick_a,quick_b=base/'quick-A.fcrstate',base/'quick-B.fcrstate'
+        assert capture(quick_a,mode='quick')==0
+        handle=lock(document)
+        try:
+            assert capture(quick_b,mode='quick')==0
+            state=app.load_snapshot(quick_b)
+            assert state['complete'] and state['statistics']['content_bytes_read']==0
+            assert {r['Status'] for r in app.compare_snapshots(app.load_snapshot(quick_a),state)}=={'Unchanged'}
+        finally:close(handle)
+        result['quick_content_lock_requires_no_content_access']=True
+        acl(nested,True)
+        try:
+            assert capture(quick_b,mode='quick')==0
+            state=app.load_snapshot(quick_b)
+            assert state['read_error_count']==1
+            assert {r['Status'] for r in app.compare_snapshots(app.load_snapshot(quick_a),state)}=={'Unknown','Unchanged'}
+        finally:acl(nested,False)
+        result['quick_denied_subtree_is_unknown']=True
+        sample_a,sample_b=base/'sample-A.fcrstate',base/'sample-B.fcrstate'
+        assert capture(sample_a,mode='sampled')==0
+        handle=lock(document)
+        try:
+            assert capture(sample_b,mode='sampled')==0
+            state=app.load_snapshot(sample_b)
+            assert state['read_error_count']==1
+            assert {r['Status'] for r in app.compare_snapshots(app.load_snapshot(sample_a),state)}=={'Unknown','Unchanged'}
+        finally:close(handle)
+        result['sampled_content_lock_is_unknown']=True
         assert not list(base.glob('.folder-change-review-*'))
         result['staging_cleaned']=True
         # Leave only generic aggregate results; fixture and paths are removed.

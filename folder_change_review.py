@@ -1,10 +1,10 @@
-"""Manual folder snapshots and full-path/SHA-256 comparison for Excel."""
+"""Manual folder states and fast full-path change review for Excel."""
 
 from __future__ import annotations
 
 import argparse
 import errno
-from collections import Counter
+from collections import Counter, deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -24,7 +24,7 @@ from runtime_safety import absolute, application_directory, extended, inside, of
 from state_store import read_container, validate_coverage, write_container
 
 sys.dont_write_bytecode = True
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 OUTPUT_FILE = "folder-change-review.xlsx"
 SNAPSHOT_FORMAT = "folder-change-review.snapshot"
 EXCLUSIONS = ["~*", "Thumbs.db", "*.tmp", "*.temp", "*.fcrstate", ".states/", "folder-change-review.exe", OUTPUT_FILE,
@@ -32,6 +32,24 @@ EXCLUSIONS = ["~*", "Thumbs.db", "*.tmp", "*.temp", "*.fcrstate", ".states/", "f
 MAX_DATA_ROWS = 1_048_570  # header row 6, data from row 7
 DEFAULT_WORKERS = 16
 HASH_BUFFER_SIZE = 256 * 1024
+SAMPLE_SIZE = 64 * 1024
+REVIEW_MODES = {"quick": "Quick review", "sampled": "Sampled contents", "full": "Full contents"}
+MODE_DETAILS = {
+    "quick": "Size and modification time only; no file contents are read. Preserved timestamps can hide edits.",
+    "sampled": "Size and first, middle and last 64 KiB; edits outside these samples can be missed.",
+    "full": "SHA-256 of complete contents; reads every byte and can be slow over SMB.",
+}
+
+
+def review_mode(snapshot):
+    return snapshot.get("review_mode", "full")
+
+
+def comparison_mode(before, after):
+    mode = review_mode(before)
+    if mode != review_mode(after):
+        raise ValueError("These states use different review modes. Choose two states created with the same mode.")
+    return mode
 
 
 def capture_error_message(error: Exception) -> str:
@@ -144,49 +162,105 @@ def read_issue(path, parts, kind, error):
             "message": message}
 
 
-def scan_files(root: str, stats: dict, issues: list):
-    """Continue past unreadable subtrees, preserving explicit coverage gaps."""
-    pending = [(root, ())]
-    while pending:
-        folder, parts = pending.pop()
-        try:
-            with os.scandir(extended(folder)) as entries:
-                for entry in entries:
-                    if entry.name.casefold() == ".states":
-                        stats["excluded_state_directories"] = stats.get("excluded_state_directories", 0) + 1
+def scan_directory(folder, parts):
+    """Reuse directory-enumeration metadata instead of opening each file."""
+    folders, files, issues = [], [], []
+    stats = {"excluded_files": 0, "skipped_links": 0, "excluded_state_directories": 0}
+    try:
+        with os.scandir(extended(folder)) as entries:
+            for entry in entries:
+                if entry.name.casefold() == ".states":
+                    stats["excluded_state_directories"] += 1
+                    continue
+                path = os.path.join(folder, entry.name)
+                child_parts = (*parts, entry.name)
+                try:
+                    if ignored(entry.name) and entry.is_file(follow_symlinks=False):
+                        stats["excluded_files"] += 1
                         continue
-                    path = os.path.join(folder, entry.name)
-                    child_parts = (*parts, entry.name)
-                    try:
-                        if ignored(entry.name) and entry.is_file(follow_symlinks=False):
+                    properties = entry.stat(follow_symlinks=False)
+                    if entry.is_symlink() or getattr(properties, "st_file_attributes", 0) & 0x400:
+                        stats["skipped_links"] += 1
+                    elif stat.S_ISDIR(properties.st_mode):
+                        folders.append((path, child_parts))
+                    elif stat.S_ISREG(properties.st_mode):
+                        if ignored(entry.name):
                             stats["excluded_files"] += 1
-                            continue
-                        properties = entry.stat(follow_symlinks=False)
-                        reparse = getattr(properties, "st_file_attributes", 0) & 0x400
-                        if entry.is_symlink() or reparse:
-                            stats["skipped_links"] += 1
-                            continue
-                        if stat.S_ISDIR(properties.st_mode):
-                            pending.append((path, child_parts))
-                        elif stat.S_ISREG(properties.st_mode):
-                            if ignored(entry.name):
-                                stats["excluded_files"] += 1
-                                continue
-                            yield path, list(child_parts)
                         else:
-                            issues.append(read_issue(path, child_parts, "unknown", OSError("Unsupported filesystem item")))
-                    except OSError as error:
-                        # Metadata failure may hide a directory: cover descendants
-                        # too, and never invent a directory as a file row.
-                        issues.append(read_issue(path, child_parts, "unknown", error))
-        except OSError as error:
-            if not parts:
-                # An unavailable root is a failed operation, not a useful state.
-                raise
-            issues.append(read_issue(folder, parts, "directory", error))
+                            files.append((path, list(child_parts), properties))
+                    else:
+                        issues.append(read_issue(path, child_parts, "unknown", OSError("Unsupported filesystem item")))
+                except OSError as error:
+                    issues.append(read_issue(path, child_parts, "unknown", error))
+    except OSError as error:
+        if not parts:
+            raise
+        issues.append(read_issue(folder, parts, "directory", error))
+    return folders, files, issues, stats
 
 
-def create_snapshot(root: str | Path, output: str | Path, workers: int = DEFAULT_WORKERS, progress=None) -> dict:
+def scan_files(root: str, stats: dict, issues: list, workers=1, progress=None):
+    """Bound parallel folder reads and preserve interrupted-subtree coverage."""
+    folders = deque([(root, ())])
+    last_progress = time.monotonic()
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        pending = set()
+        while folders or pending:
+            while folders and len(pending) < workers:
+                pending.add(executor.submit(scan_directory, *folders.popleft()))
+            completed, pending = wait(pending, timeout=.5, return_when=FIRST_COMPLETED)
+            for future in completed:
+                children, files, errors, counts = future.result()
+                folders.extend(children)
+                issues.extend(errors)
+                for key, value in counts.items():
+                    stats[key] = stats.get(key, 0) + value
+                stats["folders"] = stats.get("folders", 0) + 1
+                yield from files
+            if time.monotonic() - last_progress >= 2:
+                emit(f"Reading folders… {stats.get('folders', 0):,} completed.", progress)
+                last_progress = time.monotonic()
+
+
+def sample_file(path, initial):
+    """Bounded content sampling; never represented as a full-file fingerprint."""
+    size = initial.st_size
+    offsets = sorted({0, max(0, (size - SAMPLE_SIZE) // 2), max(0, size - SAMPLE_SIZE)})
+    # Merge overlapping ranges; small files are read completely, once.
+    ranges = []
+    for offset in offsets:
+        end = min(size, offset + SAMPLE_SIZE)
+        if ranges and offset <= ranges[-1][1]:
+            ranges[-1] = (ranges[-1][0], max(end, ranges[-1][1]))
+        else:
+            ranges.append((offset, end))
+    digest = hashlib.sha256(b"folder-change-review.sample.v1\0" + str(size).encode() + b"\0")
+    total = 0
+    with open(extended(path), "rb", buffering=0) as stream:
+        for start, end in ranges:
+            digest.update(start.to_bytes(8, "little"))
+            stream.seek(start)
+            remaining = end - start
+            while remaining:
+                data = stream.read(remaining)
+                if not data:
+                    raise OSError("File changed while being sampled. Retry the state.")
+                digest.update(data)
+                total += len(data)
+                remaining -= len(data)
+        # Do not use fstat() twice per sampled file: only the metadata required
+        # by this approximate mode is checked. Full mode keeps its stronger checks.
+        current = os.stat(extended(path), follow_symlinks=False)
+        if (current.st_size, current.st_mtime_ns) != (size, initial.st_mtime_ns):
+            raise OSError("File changed while being sampled. Retry the state.")
+        if getattr(current, "st_file_attributes", 0) & 0x400 or stat.S_ISLNK(current.st_mode):
+            raise OSError("File became a link while being sampled. Retry the state.")
+    return digest.hexdigest(), size, total
+
+
+def create_snapshot(root: str | Path, output: str | Path, workers: int = DEFAULT_WORKERS, progress=None, mode="quick") -> dict:
+    if mode not in REVIEW_MODES:
+        raise ValueError("Unknown review mode.")
     root = pasted_path(root)
     if os.path.splitext(absolute(output))[1].lower() != ".fcrstate":
         raise ValueError("State output must have an .fcrstate extension.")
@@ -194,10 +268,10 @@ def create_snapshot(root: str | Path, output: str | Path, workers: int = DEFAULT
     if inside(output, root):
         raise ValueError("State files must be saved outside the project folder. Only reports may be written inside it.")
     with safe_operation((root,), os.path.dirname(absolute(output))):
-        return _create_snapshot(root, output, workers, progress)
+        return _create_snapshot(root, output, workers, progress, mode)
 
 
-def _create_snapshot(root, output, workers, progress):
+def _create_snapshot(root, output, workers, progress, mode):
     root = absolute(root)
     if not 1 <= workers <= 32:
         raise ValueError("Workers must be between 1 and 32.")
@@ -206,13 +280,26 @@ def _create_snapshot(root, output, workers, progress):
     started, timer = now(), time.perf_counter()
     stats = {"excluded_files": 0, "skipped_links": 0, "excluded_state_directories": 0}
     files, issues = [], []
-    jobs = scan_files(root, stats, issues)
+    jobs = scan_files(root, stats, issues, workers, progress)
+    content_bytes = 0
+    last_progress = time.monotonic()
     def record(job, result):
-        path, parts = job
-        digest, size = result
-        files.append({"path": path, "parts": parts, "sha256": digest, "size": size})
-        if len(files) % 1000 == 0:
-            emit(f"Hashed {len(files):,} files...", progress)
+        nonlocal content_bytes, last_progress
+        path, parts, properties = job
+        digest, size, read_bytes = result
+        content_bytes += read_bytes
+        files.append({"path": path, "parts": parts, "sha256": digest, "size": size,
+                      "mtime_ns": properties.st_mtime_ns})
+        if time.monotonic() - last_progress >= 1 or len(files) % 1000 == 0:
+            emit(f"{REVIEW_MODES[mode]}: {len(files):,} files; {content_bytes / 1048576:,.1f} MiB read; {time.perf_counter() - timer:.1f}s", progress)
+            last_progress = time.monotonic()
+    def inspect(job):
+        if mode == "quick":
+            return None, job[2].st_size, 0
+        if mode == "sampled":
+            return sample_file(job[0], job[2])
+        digest, size = hash_file(job[0])
+        return digest, size, size
     def finish(job, result):
         try:
             value = result()
@@ -221,9 +308,9 @@ def _create_snapshot(root, output, workers, progress):
         else:
             record(job, value)
     try:
-        if workers == 1:
+        if mode == "quick" or workers == 1:
             for job in jobs:
-                finish(job, lambda: hash_file(job[0]))
+                finish(job, lambda: inspect(job))
         else:
             # Bound both concurrent reads and queued work, even for huge trees.
             with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -236,9 +323,11 @@ def _create_snapshot(root, output, workers, progress):
                             if job is None:
                                 exhausted = True
                             else:
-                                pending[executor.submit(hash_file, job[0])] = job
+                                pending[executor.submit(inspect, job)] = job
                         if pending:
-                            completed, _ = wait(pending, return_when=FIRST_COMPLETED)
+                            completed, _ = wait(pending, timeout=1, return_when=FIRST_COMPLETED)
+                            if not completed:
+                                emit(f"{REVIEW_MODES[mode]}: {len(files):,} files completed; {len(pending):,} pending; {time.perf_counter() - timer:.1f}s", progress)
                             for future in completed:
                                 finish(pending.pop(future), future.result)
                 finally:
@@ -249,18 +338,19 @@ def _create_snapshot(root, output, workers, progress):
     hash_seconds = time.perf_counter() - timer
     files.sort(key=lambda record: record["path"])
     issues.sort(key=lambda issue: (issue["path"], issue["kind"]))
-    snapshot = {"format": SNAPSHOT_FORMAT, "version": 4, "hash_algorithm": "sha256", "root": root,
+    snapshot = {"format": SNAPSHOT_FORMAT, "version": 5, "review_mode": mode,
+                "hash_algorithm": {"quick": "none", "sampled": "sha256-sample-v1", "full": "sha256"}[mode], "root": root,
                 "started_utc": started, "completed_utc": now(),
                 "exclusions": EXCLUSIONS, **stats, "files": files, "file_count": len(files),
                 "read_errors": issues, "read_error_count": len(issues), "complete": not issues,
                 "statistics": {"workers": workers, "bytes": sum(row["size"] for row in files),
-                               "scan_hash_seconds": hash_seconds}}
+                               "scan_hash_seconds": hash_seconds, "content_bytes_read": content_bytes}}
     with staged_output(output) as temporary:
         write_container(temporary, snapshot)
     emit(f"State created: {len(files):,} files; excluded: {stats['excluded_files']:,}; links skipped: {stats['skipped_links']:,}", progress)
     if issues:
         emit(f"WARNING: Incomplete coverage: {len(issues):,} read issues. Affected files will be Unknown in comparisons.", progress)
-    emit(f"Scan/hash: {hash_seconds:.2f}s; total: {time.perf_counter() - timer:.2f}s; workers: {workers}", progress)
+    emit(f"{REVIEW_MODES[mode]}: {hash_seconds:.2f}s; total: {time.perf_counter() - timer:.2f}s; workers: {workers}", progress)
     return snapshot
 
 
@@ -272,7 +362,7 @@ def load_snapshot(path: str | Path) -> dict:
         # Read compatibility for earlier machine JSON states; new states are compressed.
         with open(extended(path), encoding="utf-8") as stream:
             snapshot = json.load(stream)
-    if snapshot.get("format") != SNAPSHOT_FORMAT or snapshot.get("version") not in (1, 2, 3, 4):
+    if snapshot.get("format") != SNAPSHOT_FORMAT or snapshot.get("version") not in (1, 2, 3, 4, 5):
         raise ValueError(f"Unsupported snapshot format: {path}")
     validate_coverage(snapshot)
     seen = set()
@@ -281,8 +371,10 @@ def load_snapshot(path: str | Path) -> dict:
         if (not isinstance(full_path, str) or not full_path
                 or not isinstance(parts, list) or not parts
                 or not all(isinstance(part, str) and part for part in parts)
-                or not isinstance(digest, str) or len(digest) != 64
-                or any(char not in "0123456789abcdef" for char in digest)
+                or (review_mode(snapshot) == "quick" and digest is not None)
+                or (review_mode(snapshot) != "quick" and (not isinstance(digest, str) or len(digest) != 64
+                    or any(char not in "0123456789abcdef" for char in digest)))
+                or (snapshot.get("version") == 5 and (type(record.get("mtime_ns")) is not int))
                 or type(size) is not int or size < 0):
             raise ValueError(f"Invalid file record in snapshot: {path}")
         if full_path in seen:
@@ -292,6 +384,7 @@ def load_snapshot(path: str | Path) -> dict:
 
 
 def compare_snapshots(before: dict, after: dict) -> list[dict]:
+    mode = comparison_mode(before, after)
     # Coverage lookup is O(path depth), not O(files * read errors).
     def inventory(snapshot):
         # Apply reserved-artifact exclusions to old inventories too, so a policy
@@ -305,12 +398,12 @@ def compare_snapshots(before: dict, after: dict) -> list[dict]:
             if issue["parts"] and ((issue["kind"] == "file" and ignored(issue["parts"][-1])) or ".states" in (part.casefold() for part in issue["parts"])):
                 continue
             if issue["kind"] == "file":
-                records.setdefault(issue["path"], {"path": issue["path"], "parts": issue["parts"], "size": None, "sha256": None})
+                records.setdefault(issue["path"], {"path": issue["path"], "parts": issue["parts"], "size": None, "sha256": None, "unavailable": True})
             else:
                 scopes.add(module.normpath(issue["path"]))
         def unavailable(path, record):
             if record is not None:
-                return record["sha256"] is None
+                return record.get("unavailable", False)
             current = module.normpath(path)
             while True:
                 if current in scopes:
@@ -331,7 +424,9 @@ def compare_snapshots(before: dict, after: dict) -> list[dict]:
             status = "Added"
         elif b is None:
             status = "Deleted"
-        elif a["sha256"] != b["sha256"]:
+        elif a["size"] != b["size"] or (
+                (a.get("mtime_ns") != b.get("mtime_ns")) if mode == "quick"
+                else a["sha256"] != b["sha256"]):
             status = "Changed"
         else:
             status = "Unchanged"
@@ -365,7 +460,7 @@ def report_hierarchy(rows: list[dict], root_hint: str = "") -> tuple[str, list[l
     return ancestor, parts
 
 
-def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read_errors=(), issue_roots=None) -> None:
+def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read_errors=(), issue_roots=None, mode=None) -> None:
     import xlsxwriter
 
     if len(rows) > MAX_DATA_ROWS:
@@ -417,6 +512,8 @@ def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read
                 sheet.write_string(2, 1, "WARNING: Incomplete coverage. Unknown is not Added, Deleted or Changed. See Read issues.", title)
             for column, text in enumerate(headers, 1):
                 sheet.write_number(3, column, column, centered)
+            if mode is not None:
+                sheet.write_string(4, 1, f"Review mode: {REVIEW_MODES[mode]}. {MODE_DETAILS[mode]}", title)
             for column, text in enumerate(headers, 1):
                 sheet.write_string(5, column, text, boundary if column in (1, len(headers)) else header)
             for index, row in enumerate(rows, 1):
@@ -494,7 +591,7 @@ def compare_files(before_path: str | Path, after_path: str | Path, output: str |
         if len(read_errors) > 1_048_571:
             raise ValueError("Read issues exceed Excel's worksheet row limit.")
         write_report(rows, target, after.get("root", before.get("root", "")), read_errors,
-                     {"A": before["root"], "B": after["root"]})
+                     {"A": before["root"], "B": after["root"]}, comparison_mode(before, after))
     counts = Counter(row["Status"] for row in rows)
     emit(f"Union: {len(rows):,} files", progress)
     emit(" | ".join(f"{status}: {counts[status]:,}" for status in ("Added", "Deleted", "Changed", "Unchanged", "Unknown")), progress)
@@ -526,14 +623,16 @@ def _main(argv: list[str] | None = None) -> int:
             snapshot.add_argument("--root", required=True)
             snapshot.add_argument("--output", required=True)
             snapshot.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
-                                  help="Concurrent file hashing (1..32, default: 16)")
+                                  help="Concurrent folder/content reads (1..32, default: 16)")
+            snapshot.add_argument("--mode", choices=tuple(REVIEW_MODES), default="quick",
+                                  help="quick: size/time only (default); sampled: three 64 KiB samples; full: SHA-256 of every byte")
             compare = commands.add_parser("compare", help="Compare two snapshots and write plain Excel data")
             compare.add_argument("--before", required=True)
             compare.add_argument("--after", required=True)
             compare.add_argument("--output", default=str(application_directory() / OUTPUT_FILE))
             args = parser.parse_args(arguments)
             if args.command == "snapshot":
-                create_snapshot(pasted_path(args.root), pasted_path(args.output), args.workers)
+                create_snapshot(pasted_path(args.root), pasted_path(args.output), args.workers, mode=args.mode)
             else:
                 compare_files(pasted_path(args.before), pasted_path(args.after), pasted_path(args.output))
         result = 0

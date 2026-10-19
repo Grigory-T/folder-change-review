@@ -14,7 +14,8 @@ firewall or sandbox, and it does not constrain other programs or Windows service
 Use trusted local/SMB locations; other network redirectors and cloud-sync mounts
 are not supported or tested.
 
-Project files are opened for reading. The application does not modify content,
+Quick review enumerates directory metadata without opening file contents.
+Optional content modes open project files for reading. The application does not modify content,
 permissions or timestamps of inspected documents. Reads may affect access times
 according to filesystem policy. The only intended project writes are explicitly
 selected reports and their atomic-save staging files. Technical states/settings
@@ -29,7 +30,7 @@ use `.xlsx`. An explicitly selected report can replace the existing report at
 that path.
 
 Snapshots and workbooks contain project paths and metadata; snapshots also contain
-SHA-256 hashes. They are not encrypted. They are only written to selected local/
+full or sampled SHA-256 fingerprints when content checks are enabled. They are not encrypted. They are only written to selected local/
 SMB locations, never uploaded by the tool. State files are technical data, not
 executable pickle objects, and comparisons need no access to the live project.
 Use states produced by this tool; malformed states are rejected, but parsing an

@@ -19,7 +19,7 @@ class ReportWorkflowTests(unittest.TestCase):
         environment=patch.dict(os.environ,{'LOCALAPPDATA':str(self.base/'MachineData')})
         environment.start();self.addCleanup(environment.stop)
     def capture(self,name):
-        with contextlib.redirect_stdout(io.StringIO()):return app.create_snapshot(self.root,self.base/(name+'.fcrstate'),32)
+        with contextlib.redirect_stdout(io.StringIO()):return app.create_snapshot(self.root,self.base/(name+'.fcrstate'),32, mode="full")
     def test_size_arithmetic_and_formats_cover_zero_negative_and_equal_length_edits(self):
         for name,data in [('grow.pdf',b'a'),('delete.pdf',b'123'),('same.docx',b'ab'),('stable',b'')]:
             (self.root/name).write_bytes(data)
@@ -47,7 +47,7 @@ class ReportWorkflowTests(unittest.TestCase):
         self.assertFalse(list(self.root.glob('.folder-change-review-*')))
     def test_unknown_delta_is_blank_even_with_known_size_on_one_side(self):
         (self.root/'file.pdf').write_bytes(b'file');a=self.capture('A')
-        with patch.object(app,'hash_file',side_effect=PermissionError(13,'Denied')),contextlib.redirect_stdout(io.StringIO()):b=app.create_snapshot(self.root,self.base/'B.fcrstate',16)
+        with patch.object(app,'hash_file',side_effect=PermissionError(13,'Denied')),contextlib.redirect_stdout(io.StringIO()):b=app.create_snapshot(self.root,self.base/'B.fcrstate',16, mode="full")
         row=app.compare_snapshots(a,b)[0]
         self.assertEqual(row['Status'],'Unknown');self.assertIsNone(row['SizeDelta'])
         self.assertEqual(row['SizeA'],4);self.assertIsNone(row['SizeB'])
@@ -82,7 +82,7 @@ class ReportWorkflowTests(unittest.TestCase):
         with patch.object(app,'application_directory',return_value=self.root),contextlib.redirect_stdout(io.StringIO()):
             code=app.main(['compare','--before',str(self.base/'A.fcrstate'),'--after',str(self.base/'B.fcrstate')])
         self.assertEqual(code,0);self.assertTrue((self.root/app.OUTPUT_FILE).exists())
-        with contextlib.redirect_stdout(io.StringIO()):app.create_snapshot("'"+str(self.root)+"'",self.base/'quoted.fcrstate',1)
+        with contextlib.redirect_stdout(io.StringIO()):app.create_snapshot("'"+str(self.root)+"'",self.base/'quoted.fcrstate',1, mode="full")
         for raw,expected in [(r'"\\server\share\a b"',r'\\server\share\a b'),(" 'C:\\A B' ",'C:\\A B'),('"unmatched','"unmatched')]:
             self.assertEqual(safety.pasted_path(raw),expected)
     def test_alias_output_and_relative_issue_paths_preserve_literal_names(self):
@@ -134,7 +134,7 @@ class ReportWorkflowTests(unittest.TestCase):
         self.assertEqual((history.states/old.name).read_bytes(),original)
         self.assertEqual(history.settings()['workers'],16)
         self.assertEqual(len(history.list_states()[0]),1)
-        with contextlib.redirect_stdout(io.StringIO()):app.create_snapshot(self.root,history.new_state_path())
+        with contextlib.redirect_stdout(io.StringIO()):app.create_snapshot(self.root,history.new_state_path(), mode="full")
         self.assertEqual(app.load_snapshot(history.list_states()[0][0]['path'])['files'],state['files'])
 
     def test_legacy_copy_failure_keeps_original_history_usable(self):

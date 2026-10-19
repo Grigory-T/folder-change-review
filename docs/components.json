@@ -3,8 +3,8 @@
   "application": "folder-change-review",
   "artifact": {
     "name": "folder-change-review.exe",
-    "bytes": 11954673,
-    "sha256": "fa1037adea2846404a4e34db94fa5996f382cb849c2409600ac2d60160f39a64",
+    "bytes": 11960606,
+    "sha256": "27f289dc58dc2e98358c79f331f121ec62b545096a6b906e670659b9272293aa",
     "authenticode_signed": false,
     "imports": [
       "ADVAPI32.dll",
@@ -44,8 +44,8 @@
     ".gitattributes": "6a3e63207f3d89ccf24babd7138fa5c2ec63c3828549e8047af948cd34be8fd8",
     "BUILD-EXE.bat": "843ef02a3e61123686f55e7f91e2e19c5252d2884470ace9b99b33eb227b9300",
     "LICENSE": "65be9af76e7d660db140567d283a3c3e7bd79a6a0361192ac6b2168ff162c7d9",
-    "folder_change_review.py": "590ea3dfd539a2cf20c0d4ddf8e404a01d545ad0ce58c84a427fbecec3618c98",
-    "folder_change_review_ui.py": "e5f9b886242060e23eb6507d70d0485640b07ee6f38e9f23aef0e23e734a611c",
+    "folder_change_review.py": "1ef829eaffe1e2580f765dc4d81f7dd294e1ea7d224f1876d14e3f06f3b5bd16",
+    "folder_change_review_ui.py": "f1906bbd8e6f71b175da223f2616e5e96fbe703658793d868d53dd43d0c7f5a4",
     "licenses/LICENSE.bzip2.txt": "bd5628cc76fb0ebf9c657d1dd4d1a240a1a7b216c31663e7bbf1131c0b70a910",
     "licenses/LICENSE.cpython.txt": "8fe98bf9822926d854f56ffd8d97877d8b942617aa44eb7ea77fd99e22f2537e",
     "licenses/LICENSE.expat.txt": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
@@ -64,7 +64,7 @@
     "licenses/LICENSE.zlib.txt": "365e36720db366054863235aea5d6f440142ab968834bfaf81fa9d187c99b9b8",
     "licenses/NOTICE.openssl.txt": "49480295043318cd38a03340b7942152ffe05e31d05ad5138a2896cbbc9ac150",
     "runtime_safety.py": "4236a75e91916fd8517d360359ebf8d5da554144feb5d689e7aa98f12e687ced",
-    "state_store.py": "428973e0717ee1b5d2dbb3f0064c5a265e296fd4877f47ebe21df658a32887ec",
+    "state_store.py": "90c1470b9bf87b6dc61ecbc70bbd935c6cbe6831740626a65280f923d3f91491",
     "windows_build/audit_artifact.py": "b0febfab54bfa471bfc55346fb02ad572d991d6a91bb92ca5c9cd4377224f4b9",
     "windows_build/entry.py": "072b7dd7ae08b0a027e38f1d5ccd4e12406d850940f111b6b278fb94bcdb6632",
     "windows_build/folder-change-review.spec": "9e44d3caa660ac49c1cb47b49a7872bda72c7099a5227b10ccb84d628f2a3d84",
@@ -78,8 +78,8 @@
     {
       "path": "PYZ.pyz",
       "type": "z",
-      "bytes": 2286831,
-      "sha256": "958c545eadaed47833d956948f66d8145e72308249b16bd7cbdeb37ef6cdc484"
+      "bytes": 2292764,
+      "sha256": "4770a6cf92921a94092e4362922afa24fab515a6090c29f804f34fb45f8569fa"
     },
     {
       "path": "VCRUNTIME140.dll",
@@ -6446,11 +6446,11 @@
     },
     {
       "name": "folder_change_review",
-      "sha256": "5057b25c3dca71fa20198a6a7bd384aa72c211375065561b9ebc95621ff08924"
+      "sha256": "c25f32fd76df418bdd6e18887631dc4d67ca982a6a1a2767f890b9a515892641"
     },
     {
       "name": "folder_change_review_ui",
-      "sha256": "bd3d266316c077c802ead6b117b801165d0d85cf2d243799e90b9d49d3c3280f"
+      "sha256": "9d247a597286ba9a99c53372dc8bb556dd2e6e1096e6e7d7f0f38976f9617cd9"
     },
     {
       "name": "fractions",
@@ -6786,7 +6786,7 @@
     },
     {
       "name": "state_store",
-      "sha256": "319b23194e7d3b73b469fae2a31aed22ad9690a82cbe0813a70e3e5cd334b2be"
+      "sha256": "5b843c257e296835a6eebc3dee80b52a2e819c8ec70a66df6993144fb58f060d"
     },
     {
       "name": "statistics",

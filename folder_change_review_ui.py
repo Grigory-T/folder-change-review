@@ -4,11 +4,12 @@ from datetime import datetime
 from pathlib import Path
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import filedialog, messagebox, ttk
 
-from folder_change_review import DEFAULT_WORKERS, OUTPUT_FILE, VERSION, capture_error_message, compare_files, create_snapshot, report_error_message
+from folder_change_review import DEFAULT_WORKERS, OUTPUT_FILE, VERSION, REVIEW_MODES, MODE_DETAILS, review_mode, capture_error_message, compare_files, create_snapshot, report_error_message
 from runtime_safety import application_directory, offline_runtime, open_application_folder, pasted_path, inside
 from state_store import StateHistory, path_module
 
@@ -33,6 +34,9 @@ class Application:
         self.workers = tk.StringVar(value=str(settings.get('workers', DEFAULT_WORKERS)))
         if self.workers.get() not in ('16', '32'):
             self.workers.set(str(DEFAULT_WORKERS))
+        saved_mode = settings.get('review_mode', 'quick')
+        self.mode = tk.StringVar(value=REVIEW_MODES.get(saved_mode, REVIEW_MODES['quick']))
+        self.mode_help = tk.StringVar()
         self.before = tk.StringVar()
         self.after = tk.StringVar()
         self.before_root = tk.StringVar()
@@ -94,11 +98,19 @@ class Application:
         self.worker_box = ttk.Combobox(options, textvariable=self.workers, values=('16', '32'), state='readonly', width=5)
         self.worker_box.pack(side='left')
         ttk.Label(options, text='16 by default; try 32 for an SMB share.', style='Muted.Card.TLabel').pack(side='left', padx=(12, 0))
-        self.capture_button, self.capture_progress = self.action_row(capture, 4, self.capture_status, 'Create state', self.capture)
-        ttk.Label(capture, text='States are saved automatically.', style='Muted.Card.TLabel').grid(row=5, column=0, columnspan=2, sticky='w', pady=(2, 0))
+        ttk.Label(capture, text='Review mode', style='Card.TLabel').grid(row=4, column=0, sticky='w', pady=(8, 0))
+        self.mode_box = ttk.Combobox(capture, textvariable=self.mode, values=tuple(REVIEW_MODES.values()), state='readonly', width=24)
+        self.mode_box.grid(row=4, column=1, sticky='w', pady=(8, 0))
+        self.mode_description = ttk.Label(capture, textvariable=self.mode_help, style='Muted.Card.TLabel', wraplength=700)
+        self.mode_description.grid(row=5, column=0, columnspan=3, sticky='ew', pady=(6, 0))
+        capture.bind('<Configure>', lambda event: self.mode_description.configure(wraplength=max(100, event.width-28)), add='+')
+        self.mode.trace_add('write', self.mode_changed)
+        self.mode_changed()
+        self.capture_button, self.capture_progress = self.action_row(capture, 6, self.capture_status, 'Create state', self.capture)
+        ttk.Label(capture, text='States are saved automatically.', style='Muted.Card.TLabel').grid(row=7, column=0, columnspan=2, sticky='w', pady=(2, 0))
         self.capture_issues = []
         self.issues_button = ttk.Button(capture, text='Read issues…', width=ACTION_WIDTH, command=self.show_capture_issues)
-        self.issues_button.grid(row=5, column=2, sticky='e', pady=(2, 0))
+        self.issues_button.grid(row=7, column=2, sticky='e', pady=(2, 0))
 
         compare = self.card(cards, 1, '2', 'Compare saved states',
                             'Choose two captures. The project folder does not need to be online.', self.history_summary)
@@ -119,6 +131,7 @@ class Application:
         self.field_frames = (capture, compare)
         self.field_labels = [capture.grid_slaves(row=2,column=0)[0],
                              capture.grid_slaves(row=3,column=0)[0],
+                             capture.grid_slaves(row=4,column=0)[0],
                              compare.grid_slaves(row=2,column=0)[0],
                              compare.grid_slaves(row=4,column=0)[0]]
 
@@ -230,6 +243,10 @@ class Application:
             self.capture_status.set('Ready to create a new state.' if self.project.get().strip() else 'Choose a project folder to begin.')
             self.enable()
 
+    def mode_changed(self, *unused):
+        mode = next((key for key, label in REVIEW_MODES.items() if label == self.mode.get()), 'quick')
+        self.mode_help.set(MODE_DETAILS[mode])
+
     def refresh(self, select_latest=False):
         previous_status = self.compare_status.get()
         selected = []
@@ -244,6 +261,7 @@ class Application:
             date = datetime.fromisoformat(meta['completed_utc']).astimezone()
             folder = path_module(meta['root']).basename(meta['root'].rstrip('\\/')) or meta['root']
             label = f"{date:%Y-%m-%d %H:%M:%S}.{date.microsecond // 1000:03d}  |  {folder}  |  {meta['file_count']:,} files"
+            label += '  |  ' + REVIEW_MODES[review_mode(meta)]
             if meta.get('read_error_count', 0):
                 label += f"  |  {meta['read_error_count']:,} read issues"
             duplicates[label] += 1
@@ -274,6 +292,8 @@ class Application:
                 text = 'One state saved. Create another at a later time.'
             elif a < 0 or b < 0 or a == b:
                 text = 'Choose two different states to compare.'
+            elif review_mode(self.items[a]['metadata']) != review_mode(self.items[b]['metadata']):
+                text = 'Different review modes. Choose two states created with the same mode.'
             elif self.items[a]['metadata']['completed_utc'] > self.items[b]['metadata']['completed_utc']:
                 text = 'A is newer than B. Swap them for a forward comparison.'
             else:
@@ -291,11 +311,14 @@ class Application:
             control.configure(state=state)
         self.capture_button.configure(state='normal' if not self.busy and self.project.get().strip() else 'disabled')
         self.worker_box.configure(state='disabled' if self.busy else 'readonly')
+        self.mode_box.configure(state='disabled' if self.busy else 'readonly')
         self.issues_button.configure(state='normal' if self.capture_issues and not self.busy else 'disabled')
         for control in (self.before_box, self.after_box):
             control.configure(state='readonly' if not self.busy and self.items else 'disabled')
         a, b = self.before_box.current(), self.after_box.current()
         valid = 0 <= a < len(self.items) and 0 <= b < len(self.items) and a != b
+        if valid:
+            valid = review_mode(self.items[a]['metadata']) == review_mode(self.items[b]['metadata'])
         self.compare_button.configure(state='normal' if not self.busy and valid else 'disabled')
 
     def browse(self):
@@ -364,17 +387,19 @@ class Application:
         if not root:
             return
         workers = int(self.workers.get())
+        mode = next(key for key, label in REVIEW_MODES.items() if label == self.mode.get())
         report_directory = self.output_folder.get()
-        self.capture_status.set('Reading files and creating a state…')
+        self.capture_status.set(f'{REVIEW_MODES[mode]}: creating a state…')
         def capture():
             # Filesystem/SMB checks belong on the worker, not the UI thread.
             if inside(self.history.states, root):
                 raise ValueError("The project contains the local state cache. Choose a narrower project folder.")
-            self.history.save_settings({'project': root, 'workers': workers, 'report_directory': report_directory})
+            self.history.save_settings({'project': root, 'workers': workers, 'report_directory': report_directory, 'review_mode': mode})
             output = self.history.new_state_path()
-            state = create_snapshot(root, output, workers, lambda text: self.messages.put(('progress', text)))
+            started = time.perf_counter()
+            state = create_snapshot(root, output, workers, lambda text: self.messages.put(('progress', text)), mode=mode)
             issues = state.get('read_errors', [])
-            message = f"State saved: {len(state['files']):,} files."
+            message = f"State saved: {len(state['files']):,} files in {time.perf_counter() - started:.1f}s. {REVIEW_MODES[mode]}."
             if issues:
                 message += f"\nIncomplete coverage: {len(issues):,} read issues. See Read issues."
             return 'state', message, issues
@@ -385,6 +410,9 @@ class Application:
             return
         a, b = self.before_box.current(), self.after_box.current()
         if a < 0 or b < 0 or a == b:
+            return
+        if review_mode(self.items[a]['metadata']) != review_mode(self.items[b]['metadata']):
+            self.selection_details()
             return
         before, after = self.items[a]['path'], self.items[b]['path']
         issue_count = sum(self.items[index]['metadata'].get('read_error_count', 0) for index in (a, b))

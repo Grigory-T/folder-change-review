@@ -89,8 +89,8 @@ def main():
                 source = work/f'source-{label}.fcrstate'
                 frozen = work/f'exe-{label}.fcrstate'
                 with contextlib.redirect_stdout(io.StringIO()):
-                    snapshot = app.create_snapshot(project,source,workers)
-                subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(frozen),'--workers',str(workers)],check=True,timeout=60)
+                    snapshot = app.create_snapshot(project,source,workers, mode="full")
+                subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(frozen),'--workers',str(workers),'--mode','full'],check=True,timeout=60)
                 assert snapshot['files'] == app.load_snapshot(frozen)['files'], name
                 snapshots[label] = source, frozen
             source_report = work/'source.xlsx'; frozen_report = work/'exe.xlsx'
@@ -103,14 +103,53 @@ def main():
             if name in ('empty','single','all-statuses-move','literal-unicode','nested-lca'):
                 shutil.copy2(frozen_report,args.results/(name+'.xlsx'))
             comparisons.append({'case':name,'workers':workers,'rows':sum(counts.values()),'all_workbook_members_equal':True})
+        # Exercise the shipped CLI defaults and each capture mode, preserving
+        # stable-file timestamps instead of rewriting the entire fixture tree.
+        for mode in app.REVIEW_MODES:
+            project = base/('mode-'+mode); project.mkdir()
+            for name,data in [('stable.pdf',b'stable'),('changed.docx',b'before'),('deleted.pdf',b'delete'),('move.pdf',b'move')]:
+                (project/name).write_bytes(data)
+            snapshots = {}
+            for label in ('A','B'):
+                if label == 'B':
+                    changed = project/'changed.docx'; old_time = changed.stat().st_mtime_ns
+                    changed.write_bytes(b'AFTER!'); os.utime(changed,ns=(old_time+10_000_000_000,old_time+10_000_000_000))
+                    (project/'deleted.pdf').unlink(); (project/'New').mkdir()
+                    (project/'move.pdf').rename(project/'New/move.pdf')
+                    (project/'added.pdf').write_bytes(b'added')
+                source = base/f'{mode}-source-{label}.fcrstate'
+                frozen = base/f'{mode}-exe-{label}.fcrstate'
+                with contextlib.redirect_stdout(io.StringIO()):
+                    snapshot = app.create_snapshot(project,source,32,mode=mode)
+                flags = [] if mode == 'quick' else ['--mode',mode]
+                subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(frozen),'--workers','32',*flags],check=True,timeout=60)
+                actual = app.load_snapshot(frozen)
+                assert snapshot['files'] == actual['files']
+                assert actual['review_mode'] == mode
+                if mode == 'quick':
+                    assert actual['statistics']['content_bytes_read'] == 0
+                    assert all(row['sha256'] is None for row in actual['files'])
+                snapshots[label] = source,frozen
+            source_report=base/(mode+'-source.xlsx'); frozen_report=args.results/(mode+'-report.xlsx')
+            with contextlib.redirect_stdout(io.StringIO()):
+                counts=app.compare_files(snapshots['A'][0],snapshots['B'][0],source_report)
+            assert counts == {'Added':2,'Deleted':2,'Changed':1,'Unchanged':1}, (mode,counts)
+            subprocess.run([str(args.exe),'compare','--before',str(snapshots['A'][1]),'--after',str(snapshots['B'][1]),'--output',str(frozen_report)],check=True,timeout=60)
+            assert normalized_workbook(source_report) == normalized_workbook(frozen_report)
+            comparisons.append({'case':'mode-'+mode,'workers':32,'rows':6,'all_workbook_members_equal':True})
+        # Different modes must fail without replacing the previous report.
+        preserved=base/'mode-preserved.xlsx';preserved.write_bytes(b'previous report')
+        command=['compare','--before',str(base/'quick-exe-A.fcrstate'),'--after',str(base/'full-exe-B.fcrstate'),'--output',str(preserved)]
+        assert subprocess.run([str(args.exe),*command],timeout=60).returncode == 1
+        assert preserved.read_bytes() == b'previous report'
         # Previous production release states remain readable without rehashing.
         if args.previous_exe:
             project = base/'compatibility'; project.mkdir()
             (project/'sample.pdf').write_bytes(b'previous release content')
             previous = base/'previous.fcrstate'; current = base/'current.fcrstate'
             subprocess.run([str(args.previous_exe),'snapshot','--root',str(project),'--output',str(previous)],check=True,timeout=60)
-            subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(current)],check=True,timeout=60)
-            assert app.load_snapshot(previous)['files'] == app.load_snapshot(current)['files']
+            subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(current),'--mode','full'],check=True,timeout=60)
+            assert [{k: v for k, v in row.items() if k != 'mtime_ns'} for row in app.load_snapshot(previous)['files']] == [{k: v for k, v in row.items() if k != 'mtime_ns'} for row in app.load_snapshot(current)['files']]
             source_report = base/'compat-source.xlsx'; frozen_report = base/'compat-exe.xlsx'
             with contextlib.redirect_stdout(io.StringIO()):
                 counts = app.compare_files(previous,current,source_report)

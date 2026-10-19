@@ -36,6 +36,8 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.window = tk.Tk()
         self.window.withdraw()
         self.app = Application(self.window, self.directory)
+        self.initial_mode = self.app.mode.get()
+        self.app.mode.set(core.REVIEW_MODES["full"])
         self.window.geometry('+10000+10000')
         self.window.deiconify()
         self.window.update()
@@ -59,7 +61,7 @@ class DesktopWorkflowTests(unittest.TestCase):
         for index in range(count):
             (self.project/'file.pdf').write_bytes(bytes([index]))
             with contextlib.redirect_stdout(io.StringIO()):
-                core.create_snapshot(self.project, self.app.history.new_state_path(), 1)
+                core.create_snapshot(self.project, self.app.history.new_state_path(), 1, mode="full")
         self.app.refresh(select_latest=True)
         self.window.update()
 
@@ -79,6 +81,30 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.assertTrue(self.app.compare_button.instate(['disabled']))
         self.assertIn('first state', self.app.compare_status.get())
         self.assertIn('Choose a project', self.app.capture_status.get())
+
+    def test_new_install_defaults_to_quick_and_mode_is_saved_and_locked_when_busy(self):
+        self.assertEqual(self.initial_mode, core.REVIEW_MODES['quick'])
+        self.app.mode.set(core.REVIEW_MODES['sampled'])
+        self.assertIn('samples', self.app.mode_help.get())
+        self.app.project.set(str(self.project))
+        (self.project/'file.pdf').write_bytes(b'data')
+        self.app.capture_button.invoke()
+        self.assertTrue(self.app.mode_box.instate(['disabled']))
+        self.wait()
+        self.assertEqual(self.app.history.settings()['review_mode'],'sampled')
+        self.assertIn('Sampled contents', self.app.labels[0])
+        self.assertFalse(self.app.mode_box.instate(['disabled']))
+
+    def test_different_modes_disable_report_and_explain_recovery(self):
+        (self.project/'file.pdf').write_bytes(b'data')
+        for mode in ('quick','full'):
+            with contextlib.redirect_stdout(io.StringIO()):
+                core.create_snapshot(self.project,self.app.history.new_state_path(),mode=mode)
+        self.app.refresh(select_latest=True)
+        self.assertTrue(self.app.compare_button.instate(['disabled']))
+        self.assertIn('Different review modes',self.app.compare_status.get())
+        self.app.compare()
+        self.assertEqual(list(self.directory.glob('*.xlsx')),[])
 
     def test_capture_shows_only_its_progress_then_hides_it(self):
         (self.project/'file.pdf').write_bytes(b'data')
@@ -210,7 +236,7 @@ class DesktopWorkflowTests(unittest.TestCase):
     def test_filesystem_validation_is_background_and_close_waits(self):
         entered, release = threading.Event(), threading.Event()
         main_thread = threading.get_ident()
-        def delayed_validation(*args):
+        def delayed_validation(*args, **kwargs):
             self.assertNotEqual(threading.get_ident(),main_thread)
             entered.set()
             release.wait(3)

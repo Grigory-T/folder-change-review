@@ -21,13 +21,18 @@ def path_module(root):
 
 def write_container(path, snapshot):
     metadata = {key: value for key, value in snapshot.items() if key not in ("files", "read_errors")}
-    metadata.update({"version": snapshot["version"] if snapshot.get("version") in (3, 4) else 2, "file_count": len(snapshot["files"]), "hash_algorithm": "sha256"})
+    version = snapshot["version"] if snapshot.get("version") in (3, 4, 5) else 2
+    metadata.update({"version": version, "file_count": len(snapshot["files"])})
+    if version != 5:
+        metadata["hash_algorithm"] = "sha256"
     module = path_module(snapshot["root"])
     records = [[module.relpath(row["path"], snapshot["root"]), row["size"], row["sha256"]] for row in snapshot["files"]]
+    if version == 5:
+        records = [record + [row["mtime_ns"]] for record, row in zip(records, snapshot["files"])]
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
         archive.writestr("metadata.json", json.dumps(metadata, ensure_ascii=False, separators=(",", ":")))
         archive.writestr("files.json", json.dumps(records, ensure_ascii=False, separators=(",", ":")))
-        if metadata["version"] in (3, 4):
+        if metadata["version"] in (3, 4, 5):
             errors = [[module.relpath(issue["path"], snapshot["root"]), issue["kind"], issue["errno"],
                        issue["winerror"], issue["message"]] for issue in snapshot["read_errors"]]
             archive.writestr("errors.json", json.dumps(errors, ensure_ascii=False, separators=(",", ":")))
@@ -40,11 +45,12 @@ def read_metadata(path):
         if info.file_size > 1_048_576:
             raise ValueError("Invalid state metadata.")
         metadata = json.loads(archive.read(info))
-    if not isinstance(metadata, dict) or metadata.get("format") != FORMAT or metadata.get("version") not in (2, 3, 4) or metadata.get("hash_algorithm") != "sha256":
+    if not isinstance(metadata, dict) or metadata.get("format") != FORMAT or metadata.get("version") not in (2, 3, 4, 5):
         raise ValueError("Unsupported state format.")
+    validate_mode(metadata)
     if not isinstance(metadata.get("root"), str) or not metadata["root"] or type(metadata.get("file_count")) is not int or metadata["file_count"] < 0:
         raise ValueError("Invalid state metadata.")
-    if metadata["version"] in (3, 4):
+    if metadata["version"] in (3, 4, 5):
         count = metadata.get("read_error_count")
         if type(count) is not int or count < 0 or type(metadata.get("complete")) is not bool or metadata["complete"] != (count == 0):
             raise ValueError("Invalid state coverage metadata.")
@@ -61,7 +67,7 @@ def read_container(path):
     with zipfile.ZipFile(extended(path)) as archive:
         try:
             records = json.loads(archive.read("files.json"))
-            errors = json.loads(archive.read("errors.json")) if metadata["version"] in (3, 4) else []
+            errors = json.loads(archive.read("errors.json")) if metadata["version"] in (3, 4, 5) else []
         except KeyError as error:
             raise ValueError("State is damaged: a required record file is missing.") from error
     if not isinstance(records, list) or not isinstance(errors, list):
@@ -70,15 +76,17 @@ def read_container(path):
         raise ValueError("State record count does not match its metadata.")
     files = []
     for record in records:
-        if not isinstance(record, list) or len(record) != 3:
+        if not isinstance(record, list) or len(record) != (4 if metadata["version"] == 5 else 3):
             raise ValueError("Invalid file record in state.")
-        relative, size, digest = record
+        relative, size, digest = record[:3]
         if not isinstance(relative, str) or module.isabs(relative) or module.splitdrive(relative)[0] or ".." in relative.replace("\\", "/").split("/"):
             raise ValueError("Invalid relative path in state.")
         files.append({"path": module.join(metadata["root"], relative),
                       "parts": relative.split(module.sep), "size": size, "sha256": digest})
+        if metadata["version"] == 5:
+            files[-1]["mtime_ns"] = record[3]
     result = {**metadata, "files": files}
-    if metadata["version"] in (3, 4):
+    if metadata["version"] in (3, 4, 5):
         result["read_errors"] = []
         for record in errors:
             if not isinstance(record, list) or len(record) != 5:
@@ -92,8 +100,19 @@ def read_container(path):
     return result
 
 
+def validate_mode(snapshot):
+    if snapshot.get("version") == 5:
+        algorithms = {"quick": "none", "sampled": "sha256-sample-v1", "full": "sha256"}
+        mode = snapshot.get("review_mode")
+        if mode not in algorithms or snapshot.get("hash_algorithm") != algorithms[mode]:
+            raise ValueError("Invalid state review mode or fingerprint algorithm.")
+    elif snapshot.get("review_mode", "full") != "full" or snapshot.get("hash_algorithm", "sha256") != "sha256":
+        raise ValueError("Legacy states require full SHA-256 fingerprints.")
+
+
 def validate_coverage(snapshot):
-    if snapshot.get("version") not in (3, 4):
+    validate_mode(snapshot)
+    if snapshot.get("version") not in (3, 4, 5):
         # Older readers must never silently accept partial-state coverage.
         if snapshot.get("read_errors") or snapshot.get("complete") is False:
             raise ValueError("Partial states require format version 3 or later.")

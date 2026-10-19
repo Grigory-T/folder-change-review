@@ -148,7 +148,7 @@ class BoundedHashingTests(unittest.TestCase):
         def input_stream(path, *args, **kwargs):
             return stream if app.absolute(path) == app.absolute(self.path) else real_open(path,*args,**kwargs)
         with patch.object(app,'open',side_effect=input_stream,create=True), contextlib.redirect_stdout(io.StringIO()):
-            snapshot = app.create_snapshot(self.root,output,workers=1)
+            snapshot = app.create_snapshot(self.root,output,workers=1, mode="full")
         self.assertFalse(snapshot['complete'])
         self.assertEqual(snapshot['read_errors'][0]['kind'], 'file')
         self.assertIn('changed while', snapshot['read_errors'][0]['message'])

@@ -26,7 +26,7 @@ class CaptureFailureTests(unittest.TestCase):
         (self.blocked/'unseen.pdf').write_bytes(b'unseen')
         self.output = self.base/'previous.fcrstate'
         with contextlib.redirect_stdout(io.StringIO()):
-            app.create_snapshot(self.project, self.output, 1)
+            app.create_snapshot(self.project, self.output, 1, mode="full")
         self.previous = self.output.read_bytes()
 
     def partial_then_retry(self, failure, kind):
@@ -34,7 +34,7 @@ class CaptureFailureTests(unittest.TestCase):
             with self.subTest(workers=workers):
                 target = self.base/f'partial-{workers}.fcrstate'
                 with failure(), contextlib.redirect_stdout(io.StringIO()):
-                    state = app.create_snapshot(self.project, target, workers)
+                    state = app.create_snapshot(self.project, target, workers, mode="full")
                 self.assertFalse(state['complete'])
                 self.assertEqual(state['read_error_count'], 1)
                 self.assertEqual(state['read_errors'][0]['kind'], kind)
@@ -50,7 +50,7 @@ class CaptureFailureTests(unittest.TestCase):
                     if row['Status'] == 'Unknown':
                         self.assertEqual((row['Added'],row['Deleted'],row['Changed']), (None,None,None))
         with contextlib.redirect_stdout(io.StringIO()):
-            state = app.create_snapshot(self.project, self.base/'retry.fcrstate', 32)
+            state = app.create_snapshot(self.project, self.base/'retry.fcrstate', 32, mode="full")
         self.assertTrue(state['complete'])
         self.assertEqual(state['file_count'], len(list(self.project.rglob('*.*'))))
 
