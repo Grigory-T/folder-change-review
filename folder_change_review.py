@@ -20,11 +20,11 @@ import tempfile
 import time
 import zipfile
 
-from runtime_safety import absolute, application_directory, extended, inside, offline_runtime, output_writes, pasted_path, require_local, safe_operation
+from runtime_safety import absolute, application_directory, extended, inside, offline_runtime, output_writes, pasted_path, portable_output, owned_path, MANAGED_DIRECTORIES, safe_operation
 from state_store import read_container, validate_coverage, write_container
 
 sys.dont_write_bytecode = True
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 OUTPUT_FILE = "folder-change-review.xlsx"
 SNAPSHOT_FORMAT = "folder-change-review.snapshot"
 EXCLUSIONS = ["~*", "Thumbs.db", "*.tmp", "*.temp", "*.fcrstate", ".states/", "folder-change-review.exe", OUTPUT_FILE,
@@ -100,8 +100,7 @@ def staged_output(output: str | Path, local_only=True):
     """Replace the final file only after successful completion."""
     target = absolute(output)
     parent = os.path.dirname(target)
-    if local_only:
-        require_local(parent)
+    portable_output(target)
     if os.path.islink(extended(target)):
         raise ValueError("Output must not be a symbolic link.")
     if not os.path.isdir(extended(parent)):
@@ -162,7 +161,25 @@ def read_issue(path, parts, kind, error):
             "message": message}
 
 
-def scan_directory(folder, parts):
+def portable_exclusions(root):
+    base = os.path.realpath(extended(application_directory()))
+    target = os.path.realpath(extended(root))
+    for name in MANAGED_DIRECTORIES:
+        scope = os.path.normcase(os.path.join(base, name))
+        candidate = os.path.normcase(target)
+        if candidate == scope or candidate.startswith(scope + os.sep):
+            raise ValueError("Choose a project folder, not the tool's supporting-data folders.")
+    try:
+        relative = os.path.relpath(base, target)
+        if relative == ".." or relative.startswith(".." + os.sep):
+            return []
+    except ValueError:
+        return []
+    return [os.path.normpath(os.path.join(relative, name))
+            for name in (*MANAGED_DIRECTORIES, "settings.json")]
+
+
+def scan_directory(folder, parts, excluded=()):
     """Reuse directory-enumeration metadata instead of opening each file."""
     folders, files, issues = [], [], []
     stats = {"excluded_files": 0, "skipped_links": 0, "excluded_state_directories": 0}
@@ -173,6 +190,9 @@ def scan_directory(folder, parts):
                     stats["excluded_state_directories"] += 1
                     continue
                 path = os.path.join(folder, entry.name)
+                if os.path.normcase(path) in excluded:
+                    stats["excluded_state_directories"] += 1
+                    continue
                 child_parts = (*parts, entry.name)
                 try:
                     if ignored(entry.name) and entry.is_file(follow_symlinks=False):
@@ -199,7 +219,7 @@ def scan_directory(folder, parts):
     return folders, files, issues, stats
 
 
-def scan_files(root: str, stats: dict, issues: list, workers=1, progress=None):
+def scan_files(root: str, stats: dict, issues: list, workers=1, progress=None, excluded=()):
     """Bound parallel folder reads and preserve interrupted-subtree coverage."""
     folders = deque([(root, ())])
     last_progress = time.monotonic()
@@ -207,7 +227,7 @@ def scan_files(root: str, stats: dict, issues: list, workers=1, progress=None):
         pending = set()
         while folders or pending:
             while folders and len(pending) < workers:
-                pending.add(executor.submit(scan_directory, *folders.popleft()))
+                pending.add(executor.submit(scan_directory, *folders.popleft(), excluded))
             completed, pending = wait(pending, timeout=.5, return_when=FIRST_COMPLETED)
             for future in completed:
                 children, files, errors, counts = future.result()
@@ -264,9 +284,9 @@ def create_snapshot(root: str | Path, output: str | Path, workers: int = DEFAULT
     root = pasted_path(root)
     if os.path.splitext(absolute(output))[1].lower() != ".fcrstate":
         raise ValueError("State output must have an .fcrstate extension.")
-    require_local(output)
-    if inside(output, root):
-        raise ValueError("State files must be saved outside the project folder. Only reports may be written inside it.")
+    portable_output(output)
+    if inside(output, root) and not owned_path(output):
+        raise ValueError("States inside the project must use the tool's states folder.")
     with safe_operation((root,), os.path.dirname(absolute(output))):
         return _create_snapshot(root, output, workers, progress, mode)
 
@@ -280,7 +300,11 @@ def _create_snapshot(root, output, workers, progress, mode):
     started, timer = now(), time.perf_counter()
     stats = {"excluded_files": 0, "skipped_links": 0, "excluded_state_directories": 0}
     files, issues = [], []
-    jobs = scan_files(root, stats, issues, workers, progress)
+    if owned_path(root):
+        raise ValueError("Choose a project folder, not the tool's states, work or runtime folder.")
+    excluded_paths = portable_exclusions(root)
+    excluded = {os.path.normcase(os.path.join(root, item)) for item in excluded_paths}
+    jobs = scan_files(root, stats, issues, workers, progress, excluded)
     content_bytes = 0
     last_progress = time.monotonic()
     def record(job, result):
@@ -338,7 +362,7 @@ def _create_snapshot(root, output, workers, progress, mode):
     hash_seconds = time.perf_counter() - timer
     files.sort(key=lambda record: record["path"])
     issues.sort(key=lambda issue: (issue["path"], issue["kind"]))
-    snapshot = {"format": SNAPSHOT_FORMAT, "version": 5, "review_mode": mode,
+    snapshot = {"format": SNAPSHOT_FORMAT, "version": 6, "excluded_tool_paths": excluded_paths, "review_mode": mode,
                 "hash_algorithm": {"quick": "none", "sampled": "sha256-sample-v1", "full": "sha256"}[mode], "root": root,
                 "started_utc": started, "completed_utc": now(),
                 "exclusions": EXCLUSIONS, **stats, "files": files, "file_count": len(files),
@@ -355,14 +379,14 @@ def _create_snapshot(root, output, workers, progress, mode):
 
 
 def load_snapshot(path: str | Path) -> dict:
-    require_local(path)
+    portable_output(path)
     if zipfile.is_zipfile(extended(path)):
         snapshot = read_container(path)
     else:
         # Read compatibility for earlier machine JSON states; new states are compressed.
         with open(extended(path), encoding="utf-8") as stream:
             snapshot = json.load(stream)
-    if snapshot.get("format") != SNAPSHOT_FORMAT or snapshot.get("version") not in (1, 2, 3, 4, 5):
+    if snapshot.get("format") != SNAPSHOT_FORMAT or snapshot.get("version") not in (1, 2, 3, 4, 5, 6):
         raise ValueError(f"Unsupported snapshot format: {path}")
     validate_coverage(snapshot)
     seen = set()
@@ -374,7 +398,7 @@ def load_snapshot(path: str | Path) -> dict:
                 or (review_mode(snapshot) == "quick" and digest is not None)
                 or (review_mode(snapshot) != "quick" and (not isinstance(digest, str) or len(digest) != 64
                     or any(char not in "0123456789abcdef" for char in digest)))
-                or (snapshot.get("version") == 5 and (type(record.get("mtime_ns")) is not int))
+                or (snapshot.get("version") in (5, 6) and (type(record.get("mtime_ns")) is not int))
                 or type(size) is not int or size < 0):
             raise ValueError(f"Invalid file record in snapshot: {path}")
         if full_path in seen:
@@ -385,16 +409,30 @@ def load_snapshot(path: str | Path) -> dict:
 
 def compare_snapshots(before: dict, after: dict) -> list[dict]:
     mode = comparison_mode(before, after)
+    excluded_scopes = []
+    for snapshot in (before, after):
+        root = snapshot.get("root", "")
+        module = ntpath if ntpath.splitdrive(root)[0] or root.startswith("\\\\") else os.path
+        for path in snapshot.get("excluded_tool_paths", []):
+            excluded_scopes.append((module, module.normcase(module.normpath(module.join(root, path)))))
+    def tool_artifact(path):
+        for module, scope in excluded_scopes:
+            candidate = module.normcase(module.normpath(path))
+            if candidate == scope or candidate.startswith(scope + module.sep):
+                return True
+        return False
     # Coverage lookup is O(path depth), not O(files * read errors).
     def inventory(snapshot):
         # Apply reserved-artifact exclusions to old inventories too, so a policy
         # change does not report the tool's former outputs as project deletions.
         records = {record["path"]: record for record in snapshot["files"]
-                   if not ignored(record["parts"][-1]) and ".states" not in (part.casefold() for part in record["parts"])}
+                   if not tool_artifact(record["path"]) and not ignored(record["parts"][-1]) and ".states" not in (part.casefold() for part in record["parts"])}
         scopes = set()
         root = snapshot.get("root", "")
         module = ntpath if ntpath.splitdrive(root)[0] or root.startswith("\\\\") else os.path
         for issue in snapshot.get("read_errors", []):
+            if tool_artifact(issue["path"]):
+                continue
             if issue["parts"] and ((issue["kind"] == "file" and ignored(issue["parts"][-1])) or ".states" in (part.casefold() for part in issue["parts"])):
                 continue
             if issue["kind"] == "file":
@@ -575,6 +613,7 @@ def write_report(rows: list[dict], output: str | Path, root_hint: str = "", read
 
 def compare_files(before_path: str | Path, after_path: str | Path, output: str | Path, progress=None) -> Counter:
     target = absolute(output)
+    portable_output(target)
     if os.path.splitext(target)[1].lower() != ".xlsx":
         raise ValueError("Comparison output must have an .xlsx extension.")
     if any(os.path.normcase(target) == os.path.normcase(absolute(path)) for path in (before_path, after_path)):
@@ -621,7 +660,7 @@ def _main(argv: list[str] | None = None) -> int:
             commands = parser.add_subparsers(dest="command", required=True)
             snapshot = commands.add_parser("snapshot", help="Create a compressed machine state")
             snapshot.add_argument("--root", required=True)
-            snapshot.add_argument("--output", required=True)
+            snapshot.add_argument("--output", help="Optional state path inside the tool folder; default: automatic states history")
             snapshot.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
                                   help="Concurrent folder/content reads (1..32, default: 16)")
             snapshot.add_argument("--mode", choices=tuple(REVIEW_MODES), default="quick",
@@ -632,9 +671,14 @@ def _main(argv: list[str] | None = None) -> int:
             compare.add_argument("--output", default=str(application_directory() / OUTPUT_FILE))
             args = parser.parse_args(arguments)
             if args.command == "snapshot":
-                create_snapshot(pasted_path(args.root), pasted_path(args.output), args.workers, mode=args.mode)
+                if args.output:
+                    output = application_directory()/pasted_path(args.output)
+                else:
+                    from state_store import StateHistory
+                    output = StateHistory(application_directory()).new_state_path()
+                create_snapshot(pasted_path(args.root), output, args.workers, mode=args.mode)
             else:
-                compare_files(pasted_path(args.before), pasted_path(args.after), pasted_path(args.output))
+                compare_files(application_directory()/pasted_path(args.before), application_directory()/pasted_path(args.after), application_directory()/pasted_path(args.output))
         result = 0
     except KeyboardInterrupt:
         if sys.stderr is not None:

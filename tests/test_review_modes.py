@@ -1,3 +1,4 @@
+from runtime_safety import portable_directory
 """I/O budgets, approximation limits, mode compatibility and quick-tree coverage."""
 import contextlib
 import copy
@@ -19,6 +20,9 @@ from state_store import read_metadata
 class ReviewModeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        location = portable_directory(self.temp.name)
+        location.__enter__()
+        self.addCleanup(location.__exit__, None, None, None)
         self.base = Path(self.temp.name); self.root = self.base/'project'; self.root.mkdir()
         self.file = self.root/'file.bin'
         self.file.write_bytes(b'a'*(app.SAMPLE_SIZE*12))

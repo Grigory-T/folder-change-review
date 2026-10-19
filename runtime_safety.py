@@ -2,7 +2,6 @@
 from contextlib import contextmanager
 import os
 from pathlib import Path
-import re
 import sys
 import tempfile
 import threading
@@ -12,6 +11,8 @@ _roots = ()
 _open_folder = None
 _output_paths = set()
 _operation_lock = threading.Lock()
+_directory = None
+MANAGED_DIRECTORIES = ("states", "work", "runtime", ".states")
 
 
 def pasted_path(value):
@@ -59,34 +60,69 @@ def inside(path, root):
 
 
 def local_storage(path):
-    candidate = absolute(os.path.realpath(extended(path)))
-    if os.name == "nt":
-        import ctypes
-        drive, _ = os.path.splitdrive(candidate)
-        if drive.startswith("\\\\"):
-            return False
-        get_type = ctypes.windll.kernel32.GetDriveTypeW
-        get_type.argtypes = [ctypes.c_wchar_p]
-        get_type.restype = ctypes.c_uint
-        return get_type(drive + "\\") in (2, 3, 6)
-    network = {"cifs", "smb3", "nfs", "nfs4", "fuse.sshfs", "9p", "afs"}
-    best, kind = "", ""
-    with open("/proc/self/mountinfo", encoding="utf-8") as stream:
-        for line in stream:
-            fields, details = line.rstrip().split(" - ", 1)
-            mount = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), fields.split()[4])
-            if (candidate == mount or candidate.startswith(mount.rstrip("/") + "/")) and len(mount) > len(best):
-                best, kind = mount, details.split()[0]
-    return kind not in network
-
-
-def require_local(path):
-    if not local_storage(path):
-        raise ValueError("State files and processing workspaces must stay on local storage. SMB projects and reports are supported.")
+    # Kept as a compatibility helper for development harnesses. SMB storage is
+    # now supported for the complete portable folder, including its runtime.
+    return not absolute(path).startswith("\\\\")
 
 
 def application_directory():
-    return Path(absolute(sys.executable if getattr(sys, "frozen", False) else __file__)).parent
+    return _directory or Path(absolute(sys.executable if getattr(sys, "frozen", False) else __file__)).parent
+
+
+@contextmanager
+def portable_directory(directory):
+    global _directory
+    previous = _directory
+    _directory = Path(absolute(directory))
+    try:
+        yield _directory
+    finally:
+        _directory = previous
+
+
+def ensure_managed_directory(path, directory=None):
+    base = Path(absolute(directory or application_directory()))
+    candidate = Path(absolute(path))
+    relative = candidate.relative_to(base)
+    current = base
+    for part in relative.parts:
+        current /= part
+        try:
+            info = os.lstat(extended(current))
+        except FileNotFoundError:
+            try:
+                os.mkdir(extended(current))
+            except FileExistsError:
+                pass
+            info = os.lstat(extended(current))
+        import stat
+        if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            raise ValueError("Portable data folders must be real directories, not links or junctions.")
+    return candidate
+
+
+
+def configure_portable_storage():
+    work = ensure_managed_directory(application_directory()/"work")
+    os.environ["TMP"] = os.environ["TEMP"] = str(work)
+    tempfile.tempdir = str(work)
+    return work
+
+
+def portable_output(path):
+    if not inside(path, application_directory()):
+        raise ValueError("All states and reports must stay inside the folder containing the EXE.")
+
+
+def owned_path(path):
+    candidate, base = path_key(path), path_key(application_directory())
+    if candidate == os.path.join(base, "settings.json"):
+        return True
+    for name in MANAGED_DIRECTORIES:
+        parent = os.path.join(base, name)
+        if candidate == parent or candidate.startswith(parent + os.sep):
+            return True
+    return False
 
 
 def audit(event, args):
@@ -114,10 +150,15 @@ def audit(event, args):
             if os.path.islink(extended(value)):
                 raise PermissionError("Output writes must not follow symbolic links.")
             return
+        if owned_path(value):
+            # Realpath confinement also rejects a replaced directory alias.
+            if not inside(value, application_directory()):
+                raise PermissionError("Portable storage must remain beside the EXE.")
+            return
         if any(inside(value, root) for root in _roots):
             raise PermissionError("The project folder is read-only to this application.")
-        if not local_storage(value):
-            raise PermissionError("Working-file writes must stay on local storage.")
+        if not inside(value, application_directory()):
+            raise PermissionError("Working files must stay inside the portable tool folder.")
     if event == "open":
         filename, _, flags = args
         if flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND):
@@ -142,14 +183,13 @@ sys.addaudithook(audit)
 @contextmanager
 def offline_runtime(directory=None):
     global _offline
-    if getattr(sys, "frozen", False):
-        require_local(sys._MEIPASS)
     previous = _offline
-    _offline = True
-    try:
-        yield
-    finally:
-        _offline = previous
+    with portable_directory(directory or application_directory()):
+        _offline = True
+        try:
+            yield
+        finally:
+            _offline = previous
 
 
 @contextmanager
@@ -169,26 +209,12 @@ def _safe_operation(roots, output_directory):
     roots = tuple(absolute(root) for root in roots)
     if _roots:
         raise RuntimeError("Concurrent operations in one process are not supported.")
-    if getattr(sys, "frozen", False) and any(inside(sys._MEIPASS, root) for root in roots):
-        raise ValueError("The project folder contains the running temporary runtime. Choose a narrower project folder.")
     previous_roots, previous_temp = _roots, tempfile.tempdir
     with offline_runtime():
         _roots = roots
         try:
-            # Processing storage is independent of the selected report folder.
-            # Comparison must not resolve the saved source roots to choose it.
-            candidates = []
-            try:
-                candidates.append(tempfile.gettempdir())
-            except FileNotFoundError:
-                pass
-            candidates.extend((os.environ.get("LOCALAPPDATA"), os.fspath(Path.home())))
-            parent = next((path for path in candidates if path and local_storage(path)
-                           and not any(inside(path, root) for root in roots)
-                           and os.path.isdir(extended(path))), None)
-            if parent is None:
-                raise ValueError("No local processing folder outside the project is available.")
-            with tempfile.TemporaryDirectory(prefix=".folder-change-review-work-", dir=extended(parent)) as workspace:
+            parent = ensure_managed_directory(application_directory()/"work")
+            with tempfile.TemporaryDirectory(prefix="operation-", dir=extended(parent)) as workspace:
                 tempfile.tempdir = workspace
                 try:
                     yield

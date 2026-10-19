@@ -13,7 +13,7 @@ No Python or installation is required.
 2. Double-click it, choose the project folder, leave **Quick review** selected and click **Create state**.
 3. At another time, create another state of the same folder.
 4. In **Compare saved states**, choose **Before (A)** and **After (B)**, then click **Create Excel report**.
-5. **`folder-change-review.xlsx`** appears beside the EXE. Use **Choose report folder…** for another local or SMB destination. **Open report folder** opens the selected folder. A successful comparison atomically replaces the previous report.
+5. **`folder-change-review.xlsx`** appears beside the EXE. **Open tool folder** opens that folder. A successful comparison atomically replaces the previous report.
 
 The window has two independent numbered blocks: **Create a state** and
 **Compare saved states**. You can compare existing captures without creating a
@@ -23,14 +23,30 @@ The selected A/B pair stays selected after comparison. Identical selections
 disable the report button; a reverse-time selection is explained before running.
 
 Aligned controls and scrolling cards support smaller windows and larger fonts.
-The report-folder control stays visible. Long folder paths remain selectable
+The tool-folder control stays visible. Long folder paths remain selectable
 and can be scrolled horizontally for inspection.
 
-Capture dates, file counts and review modes identify states in the chooser. State files and
-settings are managed automatically under local `%LOCALAPPDATA%\FolderChangeReview\histories`, separately for each application-folder spelling, for both local and SMB EXEs. New states are always outside the inspected project. Legacy `.states` history beside a local EXE remains readable and is copied into the local cache during the next capture/report; originals remain untouched.
-Keep that folder to retain history. States are compressed technical files, not
-workbooks, and need no manual handling. They are not encrypted: keep your working
-folder somewhere appropriate for the project data.
+Capture dates, file counts and review modes identify states in the chooser.
+All automatic files stay in the portable tool folder, regardless of the launch
+working directory. Copy that whole folder to keep history and settings; deleting
+it removes the tool and its supporting data together.
+
+```text
+folder-change-review.exe
+settings.json
+states/                     saved technical states
+work/                       processing files; normally empty after an operation
+runtime/                    unpacked runtime; normally empty after exit
+folder-change-review.xlsx   latest report
+```
+
+There is no AppData, user-profile cache or system-temp fallback. Put the tool in
+a writable folder; unavailable or unwritable portable storage causes an error.
+Report-folder selection is removed: reports stay beside the EXE too. State files
+are compressed technical data, not workbooks, and need no manual handling. They
+are not encrypted. Legacy `.states` beside the EXE remains readable and is copied
+into `states` during the next capture/report; originals remain untouched.
+Old profile-cache history is not searched or imported automatically.
 
 The default is **Quick review** with **16 read workers**. Folder enumeration is
 parallel, with at most one pending folder job per worker. It reuses file metadata
@@ -102,9 +118,9 @@ once: capture never keeps retrying a changing or locked file. A live scan is not
 an atomic point-in-time filesystem snapshot. Network I/O timeouts are controlled
 by Windows and the SMB connection.
 
-New states use format version 5 with explicit mode/algorithm identifiers and a
-separate read-issue inventory. Formats 1–4 remain readable as Full contents states.
-Older EXEs reject version 5 rather than misinterpreting approximate fingerprints.
+New states use format version 6 with mode/algorithm identifiers, read issues and
+portable-data exclusions. Formats 1–5 remain readable. Older EXEs reject version
+6 rather than misinterpreting its exclusions.
 
 Comparison reads only saved states; the original project need not be online.
 No same-root check is performed. Choose two states of the same project using
@@ -116,19 +132,21 @@ The application makes no web requests, telemetry calls, update checks or runtime
 downloads. Python socket/HTTP APIs and subprocess launches are blocked during
 execution. SMB is accessed through ordinary Windows filesystem reads.
 The EXE may be stored inside the project or on SMB; its process still runs on
-the Windows machine and its unpacked runtime stays local. The SMB server must
-grant Execute permission to launch an EXE directly from a share. Read/write-only
-data shares can still hold projects and reports while the EXE runs locally.
+the Windows machine. Its runtime, states, settings, workspaces and report all
+stay beside the EXE, including when that folder is on SMB. The SMB server must
+grant Execute permission to launch the EXE. A local EXE can inspect an SMB
+project while keeping all outputs in its local portable folder.
 
-States and processing workspaces stay local. Both local and SMB EXEs use the local machine cache. Keep a consistent
-application path spelling to use the same cached history. Capture workspace selection avoids the inspected tree; comparison uses local
-processing storage independently of the report folder and never resolves saved source roots. The one-file runtime unpacks under local user
-application data before Python starts.
-
-Only the selected Excel report and its atomic-save staging file are write
-exceptions inside a project. State output inside the project is rejected. Other existing project files remain read-only to the
-application. Saving a report may change its project directory timestamp; history uses the local machine cache. Output file
-symlinks are rejected; mapped drives and junction parents are supported.
+Documents are opened for reading only. When the tool is inside the project, its
+own `states`, `work`, `runtime`, legacy `.states`, `settings.json`, report and
+atomic-save staging paths are the intended write locations. Supporting paths
+are excluded only at the actual tool location; unrelated project subfolders
+named `states`, `work` or `runtime` remain visible. Saved exclusion scopes apply
+to both comparison inventories, so older support files do not become deletions.
+Do not choose a supporting-data folder as the project. Links/junctions for managed
+data folders and output-file symlinks are rejected. Directory timestamps can
+change when outputs are saved. CLI state/report paths must stay in the portable
+folder; relative output and saved-state paths resolve there, independently of CWD.
 
 Reserved tool artifacts are omitted from captures and from comparisons of older
 states: `.states` subtrees, `*.fcrstate`, `folder-change-review.exe`,
@@ -201,20 +219,22 @@ openpyxl is a test reader only.
 
 On Windows x86-64, `BUILD-EXE.bat` verifies and extracts the exact pinned
 Python 3.13.16 archive, then installs hash-locked PyInstaller 6.22.3 wheels.
-It needs neither a global Python nor uv and builds the windowed EXE in `dist`.
+It needs neither a global Python nor uv. It requires the pinned MSVC Build Tools
+and Windows SDK to compile the small portable bootloader change, then builds the
+windowed EXE in `dist`. Complete patched bootloader source is a release asset.
 Building may download dependencies; the finished EXE does not.
 See [audit and reproducible build instructions](docs/build.md),
 [runtime/data boundaries](SECURITY.md) and [third-party notices](THIRD-PARTY-NOTICES.md).
 The unused XML parser and development reader are excluded from production.
 
-For scripted local testing, the same EXE also accepts:
+For scripted local testing, create `states` beside the EXE first, then use:
 
 ```powershell
-$p = Start-Process .\folder-change-review.exe -ArgumentList 'snapshot --root C:\Projects\Example --output C:\Review\A.fcrstate --workers 16' -Wait -PassThru
+$p = Start-Process .\folder-change-review.exe -ArgumentList 'snapshot --root C:\Projects\Example --output states\A.fcrstate --workers 16' -Wait -PassThru
 $p.ExitCode
 # Later:
-Start-Process .\folder-change-review.exe -ArgumentList 'snapshot --root C:\Projects\Example --output C:\Review\B.fcrstate --workers 32' -Wait
-Start-Process .\folder-change-review.exe -ArgumentList 'compare --before C:\Review\A.fcrstate --after C:\Review\B.fcrstate --output C:\Review\changes.xlsx' -Wait
+Start-Process .\folder-change-review.exe -ArgumentList 'snapshot --root C:\Projects\Example --output states\B.fcrstate --workers 32' -Wait
+Start-Process .\folder-change-review.exe -ArgumentList 'compare --before states\A.fcrstate --after states\B.fcrstate' -Wait
 ```
 
 The windowed EXE has no console output; script callers must wait for it and check
@@ -231,7 +251,7 @@ See [performance analysis and measurements](docs/performance.md) and
 `BUILD-EXE.bat`. It executes the complete core/Tk suite and rejects skipped tests:
 
 ```powershell
-.\dist\folder-change-review-tests.exe --results C:\Review\frozen-suite.json
+.\dist\folder-change-review-tests.exe --results .\dist\frozen-suite.json
 ```
 
 The test runner and its reader/test dependencies are not included in the

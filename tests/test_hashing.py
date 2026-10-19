@@ -1,3 +1,4 @@
+from runtime_safety import portable_directory
 """Deterministic stream and metadata races, without timing-dependent threads."""
 import contextlib
 import hashlib
@@ -62,6 +63,9 @@ class ControlledStream:
 class BoundedHashingTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        location = portable_directory(self.temp.name)
+        location.__enter__()
+        self.addCleanup(location.__exit__, None, None, None)
         self.addCleanup(self.temp.cleanup)
         self.work = Path(self.temp.name)
         self.root = self.work / 'project'

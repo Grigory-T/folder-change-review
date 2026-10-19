@@ -14,6 +14,7 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import folder_change_review as app
+from runtime_safety import portable_directory
 
 
 def normalized_workbook(path):
@@ -40,6 +41,10 @@ def main():
     parser.add_argument('--results', type=Path, required=True)
     parser.add_argument('--previous-exe', type=Path, help='Optional previous release for old-state compatibility')
     args = parser.parse_args()
+    args.exe = args.exe.resolve()
+    args.results = args.results.resolve()
+    scope = portable_directory(args.exe.parent); scope.__enter__()
+    args.results.relative_to(args.exe.parent)
     args.results.mkdir(parents=True, exist_ok=True)
     cases = [
         ('empty', {}, {}, {}),
@@ -147,7 +152,7 @@ def main():
             project = base/'compatibility'; project.mkdir()
             (project/'sample.pdf').write_bytes(b'previous release content')
             previous = base/'previous.fcrstate'; current = base/'current.fcrstate'
-            subprocess.run([str(args.previous_exe),'snapshot','--root',str(project),'--output',str(previous)],check=True,timeout=60)
+            subprocess.run([str(args.previous_exe),'snapshot','--root',str(project),'--output',str(previous),'--mode','full'],check=True,timeout=60)
             subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(current),'--mode','full'],check=True,timeout=60)
             assert [{k: v for k, v in row.items() if k != 'mtime_ns'} for row in app.load_snapshot(previous)['files']] == [{k: v for k, v in row.items() if k != 'mtime_ns'} for row in app.load_snapshot(current)['files']]
             source_report = base/'compat-source.xlsx'; frozen_report = base/'compat-exe.xlsx'

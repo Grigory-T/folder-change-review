@@ -3,8 +3,8 @@
 Folder Change Review runs on the Windows machine. There is no telemetry,
 update checker, web client, remote execution service or automatic download in the
 application. Supported remote filesystem access is SMB, including mapped drives.
-The EXE may be stored on SMB with Execute permission; runtime extraction, state
-history and processing workspaces stay local.
+The EXE may be stored on SMB with Execute permission; runtime extraction, states, settings, workspaces and reports stay beside the EXE.
+No AppData or system-temp fallback is used, including for an SMB-hosted EXE.
 
 Python socket/DNS/HTTP APIs and subprocess launches are blocked during normal
 application execution. Opening the explicitly chosen report folder in Explorer
@@ -17,21 +17,20 @@ are not supported or tested.
 Quick review enumerates directory metadata without opening file contents.
 Optional content modes open project files for reading. The application does not modify content,
 permissions or timestamps of inspected documents. Reads may affect access times
-according to filesystem policy. The only intended project writes are explicitly
-selected reports and their atomic-save staging files. Technical states/settings
-are stored in the local machine cache, outside the project. State output inside
-the project is rejected. Capture processing workspaces are outside the inspected
-tree; offline comparison uses local processing storage independent of the report
-folder. Legacy states are read/copied without modifying their original files. Own state/
-report/tool names are reserved and excluded from inventory. Directory timestamps
-may change when outputs are created. Failed saves preserve the previous output.
+according to filesystem policy. The only intended project writes are the tool's own portable support paths,
+report and atomic-save staging files when the tool is placed within the project.
+All these locations stay inside the tool folder. Supporting directories must be
+real directories rather than links/junctions. Original legacy states are read
+and copied without modification. The actual supporting paths and reserved
+state/report/tool names are excluded from inventory. Unrelated same-named
+project directories are still inventoried. Directory timestamps may change when
+outputs are created. Failed saves preserve the previous output.
 Output-file symlinks are rejected. States must use `.fcrstate`; report output must
 use `.xlsx`. An explicitly selected report can replace the existing report at
 that path.
 
 Snapshots and workbooks contain project paths and metadata; snapshots also contain
-full or sampled SHA-256 fingerprints when content checks are enabled. They are not encrypted. They are only written to selected local/
-SMB locations, never uploaded by the tool. State files are technical data, not
+full or sampled SHA-256 fingerprints when content checks are enabled. They are not encrypted. They are only written inside the portable local/SMB tool folder, never uploaded by the tool. State files are technical data, not
 executable pickle objects, and comparisons need no access to the live project.
 Use states produced by this tool; malformed states are rejected, but parsing an
 untrusted file is not a substitute for process isolation. Reports have literal
@@ -43,9 +42,12 @@ code.
 See [reproducible build instructions](docs/build.md), the published component
 inventory and [third-party notices](THIRD-PARTY-NOTICES.md). Python and package
 inputs are version/hash pinned. All embedded DLL/PYD bytes are checked against
-the verified Python distribution. The PyInstaller bootloader is the unmodified
-upstream wheel input; packaging changes its executable resources and appends the
-application archive. No UPX, archive utility or additional downloaded executable
+the verified Python distribution. The PyInstaller bootloader is compiled from hash-verified upstream source with
+the public `windows_build/portable_bootloader.c` change. It selects `runtime`
+relative to its executable before Python starts, rejects a linked runtime folder,
+and fails without falling back to other storage. The complete patched source,
+source checksum, build recipe and bootloader hashes are published. Packaging
+changes executable resources and appends the application archive. No UPX, archive utility or additional downloaded executable
 is bundled.
 
 Build/setup/audit tools may access public upstream repositories. They are never

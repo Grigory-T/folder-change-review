@@ -1,3 +1,4 @@
+from runtime_safety import portable_directory
 """Behavioral checks of the supported offline/read-only workflow."""
 import contextlib
 import hashlib
@@ -29,7 +30,7 @@ class SecurityTests(unittest.TestCase):
                     operation()
 
     def test_project_mutations_are_rejected_and_outputs_do_not_modify_documents(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, portable_directory(folder):
             base = Path(folder)
             root = base/'Project'; root.mkdir()
             doc = root/'Business.pdf'; doc.write_bytes(b'original business document')
@@ -54,7 +55,7 @@ class SecurityTests(unittest.TestCase):
             self.assertFalse(list(base.rglob('.folder-change-review-*')))
 
     def test_capture_cannot_overwrite_a_document_as_a_state(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, portable_directory(folder):
             root = Path(folder); doc = root/'Business.pdf'; doc.write_bytes(b'keep')
             with self.assertRaisesRegex(ValueError, 'fcrstate'):
                 app.create_snapshot(root, doc, mode="full")

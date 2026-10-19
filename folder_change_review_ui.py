@@ -10,7 +10,7 @@ from tkinter import font as tkfont
 from tkinter import filedialog, messagebox, ttk
 
 from folder_change_review import DEFAULT_WORKERS, OUTPUT_FILE, VERSION, REVIEW_MODES, MODE_DETAILS, review_mode, capture_error_message, compare_files, create_snapshot, report_error_message
-from runtime_safety import application_directory, offline_runtime, open_application_folder, pasted_path, inside
+from runtime_safety import application_directory, offline_runtime, open_application_folder, pasted_path, portable_directory
 from state_store import StateHistory, path_module
 
 BACKGROUND = '#F3F4F6'
@@ -45,7 +45,7 @@ class Application:
         self.compare_status = tk.StringVar()
         self.history_summary = tk.StringVar()
         self.report_name = tk.StringVar(value='No report created in this session.')
-        self.output_folder = tk.StringVar(value=settings.get('report_directory', str(self.history.directory)))
+        self.output_folder = tk.StringVar(value=str(self.history.directory))
         self.poll_id = None
         window.title('Folder Change Review')
         window.configure(background=BACKGROUND)
@@ -107,7 +107,7 @@ class Application:
         self.mode.trace_add('write', self.mode_changed)
         self.mode_changed()
         self.capture_button, self.capture_progress = self.action_row(capture, 6, self.capture_status, 'Create state', self.capture)
-        ttk.Label(capture, text='States are saved automatically.', style='Muted.Card.TLabel').grid(row=7, column=0, columnspan=2, sticky='w', pady=(2, 0))
+        ttk.Label(capture, text='States are saved in this tool folder.', style='Muted.Card.TLabel').grid(row=7, column=0, columnspan=2, sticky='w', pady=(2, 0))
         self.capture_issues = []
         self.issues_button = ttk.Button(capture, text='Read issues…', width=ACTION_WIDTH, command=self.show_capture_issues)
         self.issues_button.grid(row=7, column=2, sticky='e', pady=(2, 0))
@@ -141,9 +141,7 @@ class Application:
         ttk.Label(footer, text='Report: ' + OUTPUT_FILE, style='App.TLabel').grid(row=0, column=0, sticky='w')
         self.folder_path = self.path_entry(footer, self.output_folder, background=BACKGROUND)
         self.folder_path.grid(row=1, column=0, sticky='ew', padx=(0, 12))
-        self.open_button = ttk.Button(footer, text='Open report folder', width=ACTION_WIDTH, style='Action.TButton', command=self.open_folder)
-        self.report_folder_button = ttk.Button(footer, text='Choose report folder…', width=ACTION_WIDTH, style='Action.TButton', command=self.choose_report_folder)
-        self.report_folder_button.grid(row=0, column=1, sticky='e', padx=(0, 16))
+        self.open_button = ttk.Button(footer, text='Open tool folder', width=ACTION_WIDTH, style='Action.TButton', command=self.open_folder)
         self.open_button.grid(row=1, column=1, sticky='e', padx=(0, 16), pady=(4, 0))
         ttk.Label(footer, text=f'v{VERSION}   •   Local execution; SMB folders supported', style='App.TLabel', foreground=MUTED, font=('Segoe UI', 9)).grid(row=2, column=0, columnspan=2, sticky='w', pady=(10, 0))
         window.bind_all('<Alt-s>', lambda event: self.capture())
@@ -230,7 +228,6 @@ class Application:
             self.canvas.yview_moveto(0)
         if hasattr(self, 'open_button'):
             self.open_button.grid_configure(padx=(0,16+(self.scrollbar.winfo_reqwidth()+8 if overflow else 0)))
-            self.report_folder_button.grid_configure(padx=(0,16+(self.scrollbar.winfo_reqwidth()+8 if overflow else 0)))
 
     def scroll_cards(self, event):
         if isinstance(event.widget, (ttk.Combobox, tk.Entry, ttk.Entry)) or not self.scrollbar.winfo_ismapped():
@@ -307,7 +304,7 @@ class Application:
 
     def enable(self):
         state = 'disabled' if self.busy else 'normal'
-        for control in (self.project_entry, self.browse_button, self.open_button, self.report_folder_button):
+        for control in (self.project_entry, self.browse_button, self.open_button):
             control.configure(state=state)
         self.capture_button.configure(state='normal' if not self.busy and self.project.get().strip() else 'disabled')
         self.worker_box.configure(state='disabled' if self.busy else 'readonly')
@@ -330,13 +327,7 @@ class Application:
         try:
             open_application_folder(self.output_folder.get())
         except Exception as error:
-            messagebox.showerror('Open report folder', str(error), parent=self.window)
-
-    def choose_report_folder(self):
-        if not self.busy:
-            value = filedialog.askdirectory(parent=self.window, title='Choose the report folder (local or SMB)', initialdir=self.output_folder.get(), mustexist=True)
-            if value:
-                self.output_folder.set(value)
+            messagebox.showerror('Open tool folder', str(error), parent=self.window)
 
     def show_capture_issues(self):
         if not self.capture_issues or self.busy:
@@ -372,7 +363,8 @@ class Application:
         progress.start(15)
         def work():
             try:
-                self.messages.put(('done', operation()))
+                with portable_directory(self.history.directory):
+                    self.messages.put(('done', operation()))
             except Exception as error:
                 self.messages.put(('error', capture_error_message(error) if kind == 'state' else report_error_message(error)))
         try:
@@ -388,13 +380,10 @@ class Application:
             return
         workers = int(self.workers.get())
         mode = next(key for key, label in REVIEW_MODES.items() if label == self.mode.get())
-        report_directory = self.output_folder.get()
         self.capture_status.set(f'{REVIEW_MODES[mode]}: creating a state…')
         def capture():
             # Filesystem/SMB checks belong on the worker, not the UI thread.
-            if inside(self.history.states, root):
-                raise ValueError("The project contains the local state cache. Choose a narrower project folder.")
-            self.history.save_settings({'project': root, 'workers': workers, 'report_directory': report_directory, 'review_mode': mode})
+            self.history.save_settings({'project': root, 'workers': workers, 'review_mode': mode})
             output = self.history.new_state_path()
             started = time.perf_counter()
             state = create_snapshot(root, output, workers, lambda text: self.messages.put(('progress', text)), mode=mode)
@@ -420,7 +409,7 @@ class Application:
         self.compare_status.set('Comparing saved states and writing Excel…')
         def compare():
             settings = self.history.settings()
-            self.history.save_settings({**settings, 'report_directory': str(output.parent)})
+            self.history.save_settings(settings)
             counts = compare_files(before, after, output, lambda text: self.messages.put(('progress', text)))
             message = f"Added: {counts['Added']:,}   Deleted: {counts['Deleted']:,}   Changed: {counts['Changed']:,}\nUnchanged: {counts['Unchanged']:,}   Unknown: {counts['Unknown']:,}"
             if issue_count:

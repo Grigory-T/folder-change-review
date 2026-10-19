@@ -24,7 +24,11 @@ data. CPython is bundled without source-code modifications.
 | Microsoft Visual C runtime | Windows runtime DLLs | Microsoft redistribution conditions | [CPython redistribution notice](https://github.com/python/cpython/blob/v3.13.16/PC/crtlicense.txt) |
 
 PyInstaller's bootloader exception permits this application's MIT distribution;
-its full license/exception is retained. Microsoft redistribution conditions apply
+its full license/exception is retained. The portable bootloader modification
+in `windows_build/portable_bootloader.c` is GPL-2.0-or-later WITH the same
+Bootloader-exception. The complete patched corresponding source is published
+as `pyinstaller-6.22.3-portable-source.tar.gz` with the release. The build uses
+MSVC's static runtime and upstream bundled zlib 1.3.2 (separate retained notice); their notices remain included. Microsoft redistribution conditions apply
 only to the Microsoft code; keep its notices and use it on supported Microsoft
 platforms. See the full notices rather than interpreting the table as replacing
 their terms.

@@ -18,6 +18,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import folder_change_review as app
+from runtime_safety import portable_directory
 
 
 def main():
@@ -25,6 +26,9 @@ def main():
     parser.add_argument('--exe', type=Path, required=True)
     parser.add_argument('--work', type=Path, required=True)
     args = parser.parse_args()
+    args.exe = args.exe.resolve(); args.work = args.work.resolve()
+    args.work.relative_to(args.exe.parent)
+    scope = portable_directory(args.exe.parent); scope.__enter__()
     args.work.mkdir(parents=True,exist_ok=True)
     create = ctypes.windll.kernel32.CreateFileW
     create.argtypes = [wintypes.LPCWSTR,wintypes.DWORD,wintypes.DWORD,ctypes.c_void_p,wintypes.DWORD,wintypes.DWORD,wintypes.HANDLE]

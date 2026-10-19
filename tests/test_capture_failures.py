@@ -1,3 +1,4 @@
+from runtime_safety import portable_directory
 """Incomplete scans must never become apparently complete comparison states."""
 import contextlib
 import errno
@@ -15,6 +16,9 @@ import runtime_safety
 class CaptureFailureTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
+        location = portable_directory(self.temporary.name)
+        location.__enter__()
+        self.addCleanup(location.__exit__, None, None, None)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.project = self.base/'Project'

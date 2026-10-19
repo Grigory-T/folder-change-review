@@ -1,3 +1,4 @@
+from runtime_safety import portable_directory
 """Size arithmetic, portable placement and exact output-write exceptions."""
 import contextlib
 import io
@@ -15,6 +16,9 @@ from state_store import StateHistory
 class ReportWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        location = portable_directory(self.temp.name)
+        location.__enter__()
+        self.addCleanup(location.__exit__, None, None, None)
         self.base=Path(self.temp.name);self.root=self.base/'Project';self.root.mkdir()
         environment=patch.dict(os.environ,{'LOCALAPPDATA':str(self.base/'MachineData')})
         environment.start();self.addCleanup(environment.stop)
@@ -79,9 +83,9 @@ class ReportWorkflowTests(unittest.TestCase):
         self.assertFalse(list(self.root.glob('.folder-change-review-*')))
     def test_fixed_default_cli_report_and_quoted_root(self):
         (self.root/'doc.pdf').write_bytes(b'doc');self.capture('A');self.capture('B')
-        with patch.object(app,'application_directory',return_value=self.root),contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(app,'application_directory',return_value=self.base),contextlib.redirect_stdout(io.StringIO()):
             code=app.main(['compare','--before',str(self.base/'A.fcrstate'),'--after',str(self.base/'B.fcrstate')])
-        self.assertEqual(code,0);self.assertTrue((self.root/app.OUTPUT_FILE).exists())
+        self.assertEqual(code,0);self.assertTrue((self.base/app.OUTPUT_FILE).exists())
         with contextlib.redirect_stdout(io.StringIO()):app.create_snapshot("'"+str(self.root)+"'",self.base/'quoted.fcrstate',1, mode="full")
         for raw,expected in [(r'"\\server\share\a b"',r'\\server\share\a b'),(" 'C:\\A B' ",'C:\\A B'),('"unmatched','"unmatched')]:
             self.assertEqual(safety.pasted_path(raw),expected)
@@ -102,11 +106,12 @@ class ReportWorkflowTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 with app.staged_output(link,local_only=False):pass
         self.assertEqual(target.read_bytes(),b'keep')
-    def test_network_application_uses_local_machine_history(self):
-        original=safety.local_storage
-        with patch('state_store.local_storage',return_value=False):history=StateHistory(self.base/'NetworkTool')
-        self.assertNotEqual(history.states.parent,history.directory)
-        self.assertTrue(original(history.states))
+    def test_application_history_is_beside_tool_even_without_appdata(self):
+        with patch.dict(os.environ, {'LOCALAPPDATA':str(self.base/'UnusedProfile')}):
+            history=StateHistory(self.base/'NetworkTool')
+        self.assertEqual(history.states.parent,history.directory)
+        self.assertEqual(history.states.name,'states')
+        self.assertFalse((self.base/'UnusedProfile').exists())
         self.assertEqual(history.new_report_path().name,app.OUTPUT_FILE)
     def test_operation_guard_and_output_error_explanation(self):
         with safety.safe_operation((),self.base):
@@ -115,7 +120,7 @@ class ReportWorkflowTests(unittest.TestCase):
         self.assertIn('Close it in Excel',app.report_error_message(PermissionError(13,'locked')))
         self.assertFalse(safety._output_paths)
 
-    def test_local_tool_history_is_outside_project_and_legacy_import_is_read_only(self):
+    def test_portable_history_inside_project_and_legacy_import_is_read_only(self):
         tool=self.root/'Tool';tool.mkdir();legacy=tool/'.states';legacy.mkdir()
         (self.root/'document.pdf').write_bytes(b'original')
         state=self.capture('A')
@@ -123,7 +128,7 @@ class ReportWorkflowTests(unittest.TestCase):
         old=legacy/'legacy.fcrstate';old.write_bytes(original)
         settings=legacy/'settings.json';settings.write_text('{"workers":32}')
         history=StateHistory(tool)
-        self.assertFalse(safety.inside(history.states,self.root))
+        self.assertTrue(safety.inside(history.states,self.root))
         self.assertEqual(history.settings()['workers'],32)
         items,errors=history.list_states()
         self.assertEqual([item['path'] for item in items],[old]);self.assertEqual(errors,[])
@@ -134,7 +139,7 @@ class ReportWorkflowTests(unittest.TestCase):
         self.assertEqual((history.states/old.name).read_bytes(),original)
         self.assertEqual(history.settings()['workers'],16)
         self.assertEqual(len(history.list_states()[0]),1)
-        with contextlib.redirect_stdout(io.StringIO()):app.create_snapshot(self.root,history.new_state_path(), mode="full")
+        with portable_directory(tool),contextlib.redirect_stdout(io.StringIO()):app.create_snapshot(self.root,history.new_state_path(), mode="full")
         self.assertEqual(app.load_snapshot(history.list_states()[0][0]['path'])['files'],state['files'])
 
     def test_legacy_copy_failure_keeps_original_history_usable(self):

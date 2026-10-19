@@ -34,5 +34,5 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas, [],
     name="folder-change-review-tests" if testing else "folder-change-review", debug=False, strip=False, upx=False,
-    console=testing, runtime_tmpdir=r"%LOCALAPPDATA%\FolderChangeReview",
+    console=testing, runtime_tmpdir="@executable",
 )

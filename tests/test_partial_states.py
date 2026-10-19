@@ -1,3 +1,4 @@
+from runtime_safety import portable_directory
 """Truthful comparison under file locks, permissions and incomplete enumeration."""
 import copy
 import contextlib
@@ -17,6 +18,9 @@ from state_store import read_metadata
 class PartialStateTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        location = portable_directory(self.temp.name)
+        location.__enter__()
+        self.addCleanup(location.__exit__, None, None, None)
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         environment = patch.dict(os.environ, {"LOCALAPPDATA": str(self.base/"MachineData")})

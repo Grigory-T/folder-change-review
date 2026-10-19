@@ -69,6 +69,7 @@ def main():
               'windows_build/entry.py', 'windows_build/audit_artifact.py',
               'windows_build/inspect_exe.py', 'LICENSE', 'folder_change_review.py',
               'folder_change_review_ui.py', 'runtime_safety.py', 'state_store.py']
+    inputs += ['windows_build/prepare_bootloader.py', 'windows_build/portable_bootloader.c', 'windows_build/bootloader-pin.json']
     inputs += [p.relative_to(root).as_posix() for p in sorted((root/'licenses').glob('*.txt'))]
     pyinstaller = Path(importlib.metadata.distribution('pyinstaller').locate_file('PyInstaller'))
     bootloader = pyinstaller/'bootloader'/'Windows-64bit-intel'/'runw.exe'
@@ -82,7 +83,8 @@ def main():
                          'tools': {name: importlib.metadata.version(name) for name in (
                              'pip', 'pyinstaller', 'pyinstaller-hooks-contrib', 'altgraph',
                              'packaging', 'pefile', 'pywin32-ctypes', 'setuptools', 'xlsxwriter')},
-                         'bootloader_input_sha256': sha(bootloader.read_bytes())},
+                         'bootloader_input_sha256': sha(bootloader.read_bytes()),
+                         'portable_bootloader': json.loads((root/'.build/bootloader-build.json').read_text())},
                'source_inputs': {n: sha((root/n).read_bytes()) for n in sorted(inputs)},
                'payloads': payloads, 'python_modules': modules, 'standard_library': standard,
                'all_native_payloads_match_pinned_python': True}

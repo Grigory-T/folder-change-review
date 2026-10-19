@@ -1,3 +1,4 @@
+from runtime_safety import portable_directory
 """Real Tk workflow tests; use xvfb-run on a headless Linux host."""
 import contextlib
 import io
@@ -26,6 +27,9 @@ class DesktopWorkflowTests(unittest.TestCase):
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        location = portable_directory(self.temp.name)
+        location.__enter__()
+        self.addCleanup(location.__exit__, None, None, None)
         self.work = Path(self.temp.name)
         environment = patch.dict(os.environ, {"LOCALAPPDATA": str(self.work/"MachineData")})
         environment.start(); self.addCleanup(environment.stop)
@@ -215,22 +219,20 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.assertEqual(self.app.items[0]['metadata']['file_count'],1)
         self.assert_idle();self.dialog.assert_not_called()
 
-    def test_report_folder_choice_uses_fixed_name_and_preserves_previous_on_failure(self):
+    def test_report_stays_beside_exe_and_preserves_previous_on_failure(self):
         self.states(2)
-        destination=self.work/'Reports';destination.mkdir()
-        with patch('folder_change_review_ui.filedialog.askdirectory',return_value=str(destination)):
-            self.app.report_folder_button.invoke()
+        self.assertFalse(hasattr(self.app,'report_folder_button'))
         self.app.compare_button.invoke();self.wait()
-        report=destination/core.OUTPUT_FILE
+        report=self.directory/core.OUTPUT_FILE
         self.assertTrue(report.exists())
-        self.assertEqual(self.app.history.settings()['report_directory'],str(destination))
+        self.assertNotIn('report_directory',self.app.history.settings())
         previous=report.read_bytes()
         with patch('folder_change_review_ui.compare_files',side_effect=PermissionError(13,'locked',str(report))):
             self.app.compare_button.invoke();self.wait()
         self.assertEqual(report.read_bytes(),previous)
         self.assertIn('Close it in Excel',self.dialog.call_args.args[1])
         self.app.compare_button.invoke();self.wait()
-        self.assertEqual(len(list(destination.glob('*.xlsx'))),1)
+        self.assertEqual(len(list(self.directory.glob('*.xlsx'))),1)
         self.assert_idle()
 
     def test_filesystem_validation_is_background_and_close_waits(self):

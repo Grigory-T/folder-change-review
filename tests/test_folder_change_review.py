@@ -1,3 +1,4 @@
+from runtime_safety import portable_directory
 import contextlib
 import hashlib
 import io
@@ -20,6 +21,9 @@ from state_store import StateHistory, read_metadata, write_container
 class FolderChangeReviewTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        location = portable_directory(self.temp.name)
+        location.__enter__()
+        self.addCleanup(location.__exit__, None, None, None)
         self.addCleanup(self.temp.cleanup)
         self.work = Path(self.temp.name)
         environment = patch.dict(os.environ, {"LOCALAPPDATA": str(self.work/"MachineData")})
@@ -181,7 +185,7 @@ class FolderChangeReviewTests(unittest.TestCase):
         self.assertEqual(list(self.work.glob(".folder-change-review-*")), [])
 
     def test_no_same_root_check_and_in_project_state_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "outside"):
+        with self.assertRaisesRegex(ValueError, "states folder"):
             app.create_snapshot(self.root, self.root / "A.fcrstate", mode="full")
         self.assertFalse((self.root / "A.fcrstate").exists())
         before = self.snapshot("A.fcrstate")

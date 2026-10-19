@@ -3,8 +3,8 @@
   "application": "folder-change-review",
   "artifact": {
     "name": "folder-change-review.exe",
-    "bytes": 11960606,
-    "sha256": "27f289dc58dc2e98358c79f331f121ec62b545096a6b906e670659b9272293aa",
+    "bytes": 11966933,
+    "sha256": "83ec83e832bd210de8d2e4de2756cd64ef9852855efc0acb0b9ebdfaa595d65f",
     "authenticode_signed": false,
     "imports": [
       "ADVAPI32.dll",
@@ -38,14 +38,35 @@
       "setuptools": "84.0.0",
       "xlsxwriter": "3.2.9"
     },
-    "bootloader_input_sha256": "2291f269c3a3804fde1079462239e09a8b32fffbeeaa8f628a531faf5be77d41"
+    "bootloader_input_sha256": "143918c32ea03900885afc78477cb9d0f0df44c53000c1c44542408cde4b1f03",
+    "portable_bootloader": {
+      "source": {
+        "version": "6.22.3",
+        "url": "https://files.pythonhosted.org/packages/63/41/f90302845945abd4ed647933ff5ee7c6ac93983187be67f897b6cb613331/pyinstaller-6.22.3.tar.gz",
+        "filename": "pyinstaller-6.22.3.tar.gz",
+        "sha256": "05eb2f5615503e72939a7224d68b4aff572c6b0438ee4a17d0a4b481f399362d",
+        "patched_files": {
+          "bootloader/src/pyi_utils_win32.c": "4c18b150fad09fae312ee5acb099951651754c77ec915c34e9f88bb7e09f9a0c",
+          "bootloader/wscript": "151247ea13d94ab64e221f3ceeefa20c88e9e12a4a4f2ebe5544633a5878b356"
+        },
+        "MSVC_toolset": "14.44.35207",
+        "Windows_SDK": "10.0.26100.0"
+      },
+      "corresponding_source_sha256": "c35bce115283b00835a7cc6875bc0ad0fb8f48a302eb0f883811beab8ad57bf9",
+      "portable_patch_sha256": "b5747191d9ef0aad5778a99146bdf8f8c57078439a876926adf48a9c8dcc62b3",
+      "bootloaders": {
+        "run.exe": "afc49afde92621c12e8af5a5d1b6bb02eff35247fec7483b6f6ab209075a678f",
+        "runw.exe": "143918c32ea03900885afc78477cb9d0f0df44c53000c1c44542408cde4b1f03"
+      }
+    }
   },
   "source_inputs": {
     ".gitattributes": "6a3e63207f3d89ccf24babd7138fa5c2ec63c3828549e8047af948cd34be8fd8",
-    "BUILD-EXE.bat": "843ef02a3e61123686f55e7f91e2e19c5252d2884470ace9b99b33eb227b9300",
+    "BUILD-EXE.bat": "e8c4353f65b82e099a7a87843d63b8d3b08785d55c1c223a5e56bc5bc73fc79e",
     "LICENSE": "65be9af76e7d660db140567d283a3c3e7bd79a6a0361192ac6b2168ff162c7d9",
-    "folder_change_review.py": "1ef829eaffe1e2580f765dc4d81f7dd294e1ea7d224f1876d14e3f06f3b5bd16",
-    "folder_change_review_ui.py": "f1906bbd8e6f71b175da223f2616e5e96fbe703658793d868d53dd43d0c7f5a4",
+    "folder_change_review.py": "6d0b78e72e4fd79a3654022e3cfd0c1a0fcf9217cfd8192a1c2f230168a674b6",
+    "folder_change_review_ui.py": "46425c672b51c6ccecba9ec91a6808cc19991542600d12e63947db25250dc0dd",
+    "licenses/LICENSE.bootloader-zlib.txt": "f293edbac5cb1cc2f7801ce3f59cb79ba30b370f663ba8376b317bece2834aa6",
     "licenses/LICENSE.bzip2.txt": "bd5628cc76fb0ebf9c657d1dd4d1a240a1a7b216c31663e7bbf1131c0b70a910",
     "licenses/LICENSE.cpython.txt": "8fe98bf9822926d854f56ffd8d97877d8b942617aa44eb7ea77fd99e22f2537e",
     "licenses/LICENSE.expat.txt": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
@@ -63,13 +84,16 @@
     "licenses/LICENSE.xlsxwriter.txt": "cf08b60a4ded986b58a617cb8304373bda5c4eff42fb4e30d7597b616e116e87",
     "licenses/LICENSE.zlib.txt": "365e36720db366054863235aea5d6f440142ab968834bfaf81fa9d187c99b9b8",
     "licenses/NOTICE.openssl.txt": "49480295043318cd38a03340b7942152ffe05e31d05ad5138a2896cbbc9ac150",
-    "runtime_safety.py": "4236a75e91916fd8517d360359ebf8d5da554144feb5d689e7aa98f12e687ced",
-    "state_store.py": "90c1470b9bf87b6dc61ecbc70bbd935c6cbe6831740626a65280f923d3f91491",
-    "windows_build/audit_artifact.py": "b0febfab54bfa471bfc55346fb02ad572d991d6a91bb92ca5c9cd4377224f4b9",
-    "windows_build/entry.py": "072b7dd7ae08b0a027e38f1d5ccd4e12406d850940f111b6b278fb94bcdb6632",
-    "windows_build/folder-change-review.spec": "9e44d3caa660ac49c1cb47b49a7872bda72c7099a5227b10ccb84d628f2a3d84",
+    "runtime_safety.py": "5a3b70e4e33c37278a3fbd5b72bbf48475829ea66ef58dd0ff0406359ddf8a7e",
+    "state_store.py": "6c09d0d7beb51496828ec18ac03060230bf4b3bf91e7aa9291a2764ee08b4ae8",
+    "windows_build/audit_artifact.py": "857a00bd77003b6cce200ef6ead55663d740c2a74e182370eb8e66a71609d951",
+    "windows_build/bootloader-pin.json": "aa0501dc69fb253b3cfa0bb084354ce2221ec01c3984486f13eb06776d05d42b",
+    "windows_build/entry.py": "2e8b9cef093ed08856ff08d93cf3d74989c3d0db94e90af80b2108302eeb69e8",
+    "windows_build/folder-change-review.spec": "4e3b803d8f2f1a81ef9f869241f8cb175074c140a969794a1903bdf3be1e0170",
     "windows_build/inspect_exe.py": "94b6464d8e689364aae2cf8df0b7a1c53b6203d0ee31db146c2a67fd9120fdd3",
+    "windows_build/portable_bootloader.c": "b5747191d9ef0aad5778a99146bdf8f8c57078439a876926adf48a9c8dcc62b3",
     "windows_build/prepare-python.ps1": "a5862c89c9778895284fb1be093ad774e46e97831c3eaeaf2ccfda1a891b9a6a",
+    "windows_build/prepare_bootloader.py": "53f7638130636ca01399e59be1bdce40ba5be71cbeccb87f4a03a0471ca4208f",
     "windows_build/python-distribution.json": "3a6e2c52530bdd7d6eaeb4ca642c6a30f9c98a86dcb7b8fcd1e745070ada9204",
     "windows_build/requirements-build.txt": "b53d71297eefa38d142deaf0836230595a2c4f771dd6c7d56453e67426673a19",
     "windows_build/requirements-runtime.txt": "c5515e21e791c721e6b95cef15ba084bdbcb34a20fb49b753998d291ab1cc9c9"
@@ -78,8 +102,8 @@
     {
       "path": "PYZ.pyz",
       "type": "z",
-      "bytes": 2292764,
-      "sha256": "4770a6cf92921a94092e4362922afa24fab515a6090c29f804f34fb45f8569fa"
+      "bytes": 2294675,
+      "sha256": "563f0f7caa04a4027e4aee3d44539828c2f486f3286eecc20cadc942da36308d"
     },
     {
       "path": "VCRUNTIME140.dll",
@@ -5840,8 +5864,8 @@
     {
       "path": "entry",
       "type": "s",
-      "bytes": 299,
-      "sha256": "c335c8bce42097342733102e5fffeacdcdb4a8eb3d11febbfda8846ea43bb83f"
+      "bytes": 385,
+      "sha256": "28720ad69d936fef94d7f3bd18b28986cc3a85fc7daa198bdb1ca67729d1d1bc"
     },
     {
       "path": "libcrypto-3-x64.dll",
@@ -5911,6 +5935,12 @@
       "type": "b",
       "bytes": 32604,
       "sha256": "0598064c7d2718e38d7914a7d08343b2fa008e3bea9ebba2aa7a6ffa5900dd64"
+    },
+    {
+      "path": "licenses/third-party/LICENSE.bootloader-zlib.txt",
+      "type": "b",
+      "bytes": 1330,
+      "sha256": "f293edbac5cb1cc2f7801ce3f59cb79ba30b370f663ba8376b317bece2834aa6"
     },
     {
       "path": "licenses/third-party/LICENSE.bzip2.txt",
@@ -6446,11 +6476,11 @@
     },
     {
       "name": "folder_change_review",
-      "sha256": "c25f32fd76df418bdd6e18887631dc4d67ca982a6a1a2767f890b9a515892641"
+      "sha256": "ccfb07a3533b91d8fe7b7b66085010db40eba1abb4f116748b70fab7e451bc96"
     },
     {
       "name": "folder_change_review_ui",
-      "sha256": "9d247a597286ba9a99c53372dc8bb556dd2e6e1096e6e7d7f0f38976f9617cd9"
+      "sha256": "777a379df6da4e8b45cf7cbf50f91839809267ddf4d804d717af02436caf8fff"
     },
     {
       "name": "fractions",
@@ -6758,7 +6788,7 @@
     },
     {
       "name": "runtime_safety",
-      "sha256": "1c058dbdf87d69cdd0de1dbed24c4a51fe645ebbe6326bd4f594eae8f65359ed"
+      "sha256": "bf1fdbc4d538e0024462a7233b68b4303ab9906ae9c386a2d05495931645bcdc"
     },
     {
       "name": "secrets",
@@ -6786,7 +6816,7 @@
     },
     {
       "name": "state_store",
-      "sha256": "5b843c257e296835a6eebc3dee80b52a2e819c8ec70a66df6993144fb58f060d"
+      "sha256": "3c7a85f5b3efbdbdff77dfd8e1c9c8184792fbeef507200f912b1dfcfddde1fc"
     },
     {
       "name": "statistics",

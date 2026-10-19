@@ -1,12 +1,10 @@
-"""Native portable placement, long paths, SMB output and atomic-save checks.
+"""Native portable-folder acceptance using disposable fixtures only.
 
-Only new UUID fixtures are created/changed/deleted, including on the supplied
-share. The application never launches these test harness subprocesses.
+The optional SMB share must be a test destination. The harness creates and
+removes only its own UUID subtree; production never launches subprocesses.
 """
 import argparse
 import contextlib
-import ctypes
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,115 +12,102 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import uuid
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import folder_change_review as app
-from runtime_safety import extended, local_storage
+from runtime_safety import extended, portable_directory
 from state_store import StateHistory
 from windows_build.verify import normalized_workbook
 
-def main():
-    parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--exe',type=Path,required=True)
-    parser.add_argument('--work',type=Path,required=True)
-    parser.add_argument('--share',type=Path)
-    args=parser.parse_args();args.work.mkdir(parents=True,exist_ok=True)
-    result={'cases':[]}
-    def run(exe,*arguments):
-        return subprocess.run([extended(exe) if len(str(exe))>240 else str(exe),*map(str,arguments)],capture_output=True,timeout=180).returncode
-    with tempfile.TemporaryDirectory(prefix='placement-',dir=args.work) as temporary, contextlib.ExitStack() as cleanup:
-        base=Path(temporary)
-        for long in (False,True):
-            root=base/('Long' if long else 'Project')
-            if long:
-                for i in range(5):root/=f'{i}-'+('long-path-'*7)
-            Path(extended(root)).mkdir(parents=True)
-            document=root/'Document-пример.pdf';Path(extended(document)).write_bytes(b'before')
-            exe=root/'folder-change-review.exe';shutil.copyfile(args.exe,extended(exe))
-            launcher=args.exe if long else exe
-            history=StateHistory(root);cleanup.callback(shutil.rmtree,history.states.parent,True)
-            before=history.new_state_path();after=history.new_state_path()
-            if long:
-                state_folder=base/'LongStates'
-                for i in range(5):state_folder/=f'{i}-'+('long-state-path-'*5)
-                Path(extended(state_folder)).mkdir(parents=True)
-                before=state_folder/'A.fcrstate';after=state_folder/'B.fcrstate'
-            assert run(launcher,'snapshot','--root','"'+str(root)+'"','--output',before,'--workers',32)==0
-            a=app.load_snapshot(before);assert a['file_count']==1 and a['complete']
-            assert not app.inside(history.states,root)
-            assert run(launcher,'snapshot','--root',root,'--output',root/'rejected.fcrstate')==1
-            assert not Path(extended(root/'rejected.fcrstate')).exists()
-            Path(extended(document)).write_bytes(b'after longer')
-            assert run(launcher,'snapshot','--root',root,'--output',after,'--workers',16)==0
-            # No --output: report belongs beside the relocated executable, not cwd.
-            assert run(launcher,'compare','--before',before,'--after',after,*(['--output',str(root/app.OUTPUT_FILE)] if long else []))==0
-            report=root/app.OUTPUT_FILE;assert Path(extended(report)).is_file()
-            source=base/('long-source.xlsx' if long else 'source.xlsx')
-            app.compare_files(before,after,source)
-            assert normalized_workbook(extended(report))==normalized_workbook(source)
-            previous=Path(extended(report)).read_bytes()
-            assert run(launcher,'compare','--before',before,'--after',after,*(['--output',str(root/app.OUTPUT_FILE)] if long else []))==0
-            latest=history.new_state_path()
-            assert run(launcher,'snapshot','--root',root,'--output',latest)==0
-            assert app.load_snapshot(latest)['files']==app.load_snapshot(after)['files']
-            assert not list(Path(extended(root)).glob('.folder-change-review-*'))
-            shutil.copyfile(extended(report),args.work/('long-path.xlsx' if long else 'inside-project.xlsx'))
-            result['cases'].append({'case':'long-path' if long else 'inside-project','path_over_260':len(str(report))>260,'files':1,'source_exe_workbook_equal':True,'report_and_history_excluded':True,'history_outside_project':True,'fixed_report_overwrite':True})
-        # A directory junction gives output another spelling of the same folder.
-        project=base/'AliasProject';project.mkdir();(project/'file.pdf').write_bytes(b'file')
-        a=base/'alias-A.fcrstate';b=base/'alias-B.fcrstate'
-        app.create_snapshot(project,a);app.create_snapshot(project,b)
-        alias=base/'Alias';subprocess.run(['cmd','/c','mklink','/J',str(alias),str(project)],check=True,capture_output=True)
-        assert run(args.exe,'compare','--before',a,'--after',b,'--output',alias/app.OUTPUT_FILE)==0
-        assert (project/app.OUTPUT_FILE).is_file()
-        with tempfile.TemporaryDirectory(prefix='offline-output-',dir=args.work) as out:
-            # Compare must not need the original path at all.
-            project.rename(base/'Gone')
-            assert run(args.exe,'compare','--before',a,'--after',b,'--output',Path(out)/app.OUTPUT_FILE)==0
-        result['junction_output_and_offline_compare']=True
-        if args.share:
-            root=args.share/('fcr-placement-'+uuid.uuid4().hex);root.mkdir()
-            history=StateHistory(root)
-            try:
-                assert local_storage(history.states)
-                exe=root/'folder-change-review.exe';shutil.copyfile(args.exe,exe)
-                (root/'file.pdf').write_bytes(b'before')
-                a=history.new_state_path();b=history.new_state_path()
-                try:
-                    code=run(exe,'snapshot','--root',root,'--output',a,'--workers',32)
-                    result['SMB_executable_execute_permission']=True
-                except PermissionError as error:
-                    # A data share may intentionally omit FILE_EXECUTE. Keep
-                    # testing SMB output without changing server permissions.
-                    result['SMB_executable_execute_permission']=False
-                    result['SMB_launch_os_error']=error.winerror
-                    exe=args.exe
-                    code=run(exe,'snapshot','--root',root,'--output',a,'--workers',32)
-                assert code==0
-                (root/'file.pdf').write_bytes(b'after larger')
-                assert run(exe,'snapshot','--root',root,'--output',b,'--workers',16)==0
-                assert run(exe,'compare','--before',a,'--after',b,'--output',root/app.OUTPUT_FILE)==0
-                report=root/app.OUTPUT_FILE
-                assert report.is_file()
-                app.compare_files(a,b,base/'smb-source.xlsx')
-                assert normalized_workbook(report)==normalized_workbook(base/'smb-source.xlsx')
-                # Selected report and staging are the only SMB write exceptions.
-                assert run(exe,'snapshot','--root',root,'--output',root/'rejected.fcrstate')==1
-                assert not (root/'rejected.fcrstate').exists()
-                assert run(exe,'compare','--before',a,'--after',b,'--output',root/app.OUTPUT_FILE)==0
-                c=history.new_state_path()
-                assert run(exe,'snapshot','--root',root,'--output',c)==0
-                assert app.load_snapshot(c)['files']==app.load_snapshot(b)['files']
-                shutil.copyfile(report,args.work/'SMB-report.xlsx')
-                result['SMB_report_with_local_history']=True
-                result['SMB_source_exe_workbook_equal']=True
-                result['SMB_repeated_capture_excludes_report']=True
-                result['SMB_state_output_rejected']=True
-            finally:
-                shutil.rmtree(root)
-                if history.states.exists():shutil.rmtree(history.states.parent)
-    (args.work/'placement.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
-    print(json.dumps(result),flush=True)
 
-if __name__=='__main__':main()
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--exe', type=Path, required=True)
+    parser.add_argument('--work', type=Path, required=True)
+    parser.add_argument('--share', type=Path)
+    args = parser.parse_args()
+    args.exe = args.exe.resolve(); args.work.mkdir(parents=True, exist_ok=True)
+    result = {}
+    with tempfile.TemporaryDirectory(prefix='portable-', dir=args.work) as temporary:
+        base = Path(temporary)
+        outside = base/'Outside'; outside.mkdir()
+        poison = os.environ.copy()
+        for name in ('TEMP', 'TMP', 'LOCALAPPDATA', 'APPDATA'):
+            poison[name] = str(outside)
+        def run(exe, *arguments):
+            return subprocess.run([str(exe), *map(str, arguments)], cwd=outside,
+                                  env=poison, capture_output=True, timeout=120).returncode
+        def exercise(tool, smb=False):
+            tool.mkdir(parents=True)
+            exe = tool/'folder-change-review.exe'; shutil.copyfile(args.exe, exe)
+            document = tool/'Document.pdf'; document.write_bytes(b'before')
+            unrelated = tool/'Documents/states'; unrelated.mkdir(parents=True)
+            (unrelated/'Actual.pdf').write_bytes(b'actual')
+            history = StateHistory(tool)
+            a = history.new_state_path(); b = history.new_state_path()
+            with portable_directory(tool):
+                history.save_settings({'project': str(tool), 'workers': 32, 'review_mode': 'quick'})
+                assert run(exe, 'snapshot', '--root', tool, '--output', a, '--workers', 32) == 0
+                first = app.load_snapshot(a)
+                assert first['file_count'] == 2 and first['statistics']['content_bytes_read'] == 0
+                document.write_bytes(b'after longer')
+                assert run(exe, 'snapshot', '--root', tool, '--output', b, '--workers', 16) == 0
+                second = app.load_snapshot(b)
+                assert {r['Status'] for r in app.compare_snapshots(first, second)} == {'Changed', 'Unchanged'}
+                assert run(exe, 'compare', '--before', a, '--after', b) == 0
+                report = tool/app.OUTPUT_FILE
+                app.compare_files(a, b, tool/'source.xlsx')
+                assert normalized_workbook(report) == normalized_workbook(tool/'source.xlsx')
+                (tool/'source.xlsx').unlink()
+                c = history.new_state_path()
+                assert run(exe, 'snapshot', '--root', tool, '--output', c) == 0
+                assert app.load_snapshot(c)['files'] == second['files']
+                assert run(exe, 'compare', '--before', a, '--after', b, '--output', outside/'escaped.xlsx') == 1
+                assert run(exe, 'snapshot', '--root', tool, '--output', outside/'escaped.fcrstate') == 1
+                assert not list((tool/'work').iterdir())
+                assert not list((tool/'runtime').iterdir())
+                assert history.settings()['project'] == str(tool)
+            shutil.copyfile(report, args.work/('SMB.xlsx' if smb else 'portable.xlsx'))
+            return a.name, b.name
+        original = base/'Tool with spaces'; names = exercise(original)
+        result['in_project_support_paths_excluded'] = True
+        result['unrelated_states_directory_preserved'] = True
+        result['launch_cwd_and_profile_temp_ignored'] = not list(outside.iterdir())
+        assert result['launch_cwd_and_profile_temp_ignored']
+        copied = base/'Copied tool'; shutil.copytree(original, copied)
+        shutil.rmtree(original)
+        with portable_directory(copied):
+            history = StateHistory(copied)
+            assert len(history.list_states()[0]) == 3
+            assert history.settings()['project'] == str(copied)
+            # Remove the project documents; compare must use saved states only.
+            (copied/'Document.pdf').unlink(); shutil.rmtree(copied/'Documents')
+            assert run(copied/'folder-change-review.exe', 'compare', '--before', copied/'states'/names[0],
+                       '--after', copied/'states'/names[1]) == 0
+            assert not list((copied/'runtime').iterdir())
+        result['copied_folder_keeps_history_settings_and_offline_compare'] = True
+        # Long project and state paths under an ordinary executable location.
+        long_root = copied/'Project'
+        for i in range(5): long_root /= str(i)+'-'+'long-path-'*6
+        Path(extended(long_root)).mkdir(parents=True)
+        Path(extended(long_root/'File.pdf')).write_bytes(b'file')
+        state = copied/'states'
+        for i in range(5): state /= str(i)+'-'+'long-state-'*6
+        Path(extended(state)).mkdir(parents=True)
+        state /= 'long.fcrstate'
+        assert run(copied/'folder-change-review.exe','snapshot','--root',long_root,'--output',state) == 0
+        with portable_directory(copied): assert app.load_snapshot(state)['file_count'] == 1
+        result['long_project_and_state_paths'] = True
+        if args.share:
+            remote = args.share/('portable-'+uuid.uuid4().hex)
+            try:
+                exercise(remote, smb=True)
+                result['SMB_complete_portable_folder'] = True
+            finally:
+                if remote.exists(): shutil.rmtree(remote)
+        assert not list(outside.iterdir())
+    (args.work/'placement.json').write_text(json.dumps(result, indent=2)+'\n')
+    print(json.dumps(result))
+
+
+if __name__ == '__main__': main()
