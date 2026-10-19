@@ -109,7 +109,7 @@ class ReportWorkflowTests(unittest.TestCase):
     def test_application_history_is_beside_tool_even_without_appdata(self):
         with patch.dict(os.environ, {'LOCALAPPDATA':str(self.base/'UnusedProfile')}):
             history=StateHistory(self.base/'NetworkTool')
-        self.assertEqual(history.states.parent,history.directory)
+        self.assertEqual(history.states.parent,history.directory/safety.DATA_DIRECTORY)
         self.assertEqual(history.states.name,'states')
         self.assertFalse((self.base/'UnusedProfile').exists())
         self.assertEqual(history.new_report_path().name,app.OUTPUT_FILE)

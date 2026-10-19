@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import folder_change_review as app
 import runtime_safety as safety
+from runtime_safety import DATA_DIRECTORY
 from state_store import StateHistory
 
 
@@ -42,9 +43,9 @@ class PortableStorageTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):app.compare_files(a,b,self.tool/app.OUTPUT_FILE)
             finally:tempfile.tempdir=old
         self.assertEqual([p.name for p in unused.iterdir()],['sentinel'])
-        self.assertEqual(history.states,self.tool/'states')
-        self.assertTrue((self.tool/'settings.json').is_file())
-        self.assertEqual(list((self.tool/'work').iterdir()),[])
+        self.assertEqual(history.states,self.tool/DATA_DIRECTORY/'states')
+        self.assertTrue((self.tool/DATA_DIRECTORY/'settings.json').is_file())
+        self.assertEqual(list((self.tool/DATA_DIRECTORY/'work').iterdir()),[])
         self.assertFalse((self.tool/'.states').exists())
 
     def test_copy_folder_preserves_history_settings_and_offline_comparison(self):
@@ -60,20 +61,21 @@ class PortableStorageTests(unittest.TestCase):
             self.assertEqual(copied.settings()['workers'],32)
             self.assertNotIn('report_directory',copied.settings())
             items,errors=copied.list_states();self.assertEqual(len(items),2);self.assertFalse(errors)
-            with contextlib.redirect_stdout(io.StringIO()):counts=app.compare_files(destination/'states'/a.name,destination/'states'/b.name,destination/app.OUTPUT_FILE)
+            with contextlib.redirect_stdout(io.StringIO()):counts=app.compare_files(destination/DATA_DIRECTORY/'states'/a.name,destination/DATA_DIRECTORY/'states'/b.name,destination/app.OUTPUT_FILE)
             self.assertEqual(counts,{'Unchanged':1})
             self.assertTrue((destination/app.OUTPUT_FILE).is_file())
 
     def test_self_scan_excludes_only_its_actual_supporting_paths(self):
+        (self.tool/DATA_DIRECTORY).mkdir()
         for name in ('states','runtime','work'):
             folder=self.tool/name;folder.mkdir();(folder/'ignored.bin').write_bytes(b'ignored')
-        (self.tool/'settings.json').write_text('{}')
+        (self.tool/DATA_DIRECTORY/'settings.json').write_text('{}')
         (self.tool/'document.pdf').write_bytes(b'doc')
         ordinary=self.tool/'User files'/'states';ordinary.mkdir(parents=True);(ordinary/'keep.pdf').write_bytes(b'keep')
         (self.tool/'folder-change-review.exe').write_bytes(b'tool')
         a,state=self.capture(self.tool)
         self.assertEqual({row['parts'][-1] for row in state['files']},{'document.pdf','keep.pdf'})
-        self.assertEqual(len(state['excluded_tool_paths']),5)
+        self.assertEqual(len(state['excluded_tool_paths']),7)
         b,_=self.capture(self.tool)
         self.assertEqual({row['Status'] for row in app.compare_snapshots(app.load_snapshot(a),app.load_snapshot(b))},{'Unchanged'})
 
@@ -92,7 +94,7 @@ class PortableStorageTests(unittest.TestCase):
         with safety.safe_operation((self.tool,),self.tool):
             with self.assertRaises(PermissionError):document.write_bytes(b'bad')
             with self.assertRaises(PermissionError):(self.tool/'other.txt').write_bytes(b'bad')
-            self.assertTrue(safety.inside(tempfile.gettempdir(),self.tool/'work'))
+            self.assertTrue(safety.inside(tempfile.gettempdir(),self.tool/DATA_DIRECTORY/'work'))
         self.assertEqual(hashlib.sha256(document.read_bytes()).hexdigest(),before)
         self.capture(self.tool)
 
@@ -108,7 +110,8 @@ class PortableStorageTests(unittest.TestCase):
 
     def test_portable_data_symlink_does_not_write_or_read_outside_tool(self):
         target=self.base/'Outside';target.mkdir();(target/'sentinel').write_bytes(b'keep')
-        link=self.tool/'states'
+        (self.tool/DATA_DIRECTORY).mkdir()
+        link=self.tool/DATA_DIRECTORY/'states'
         if os.name=='nt':
             import subprocess
             subprocess.run(['cmd','/c','mklink','/J',str(link),str(target)],check=True,capture_output=True)
@@ -158,3 +161,25 @@ class PortableStorageTests(unittest.TestCase):
             with self.subTest(paths=paths),self.assertRaises(ValueError):validate_mode(bad)
         bad=copy.deepcopy(state);bad['root']=None
         with self.assertRaises(ValueError):validate_mode(bad)
+
+    def test_root_level_v09_history_and_preferences_migrate_without_modifying_originals(self):
+        path,state=self.capture()
+        legacy=self.tool/'states';legacy.mkdir()
+        original=legacy/'v09.fcrstate';shutil.copyfile(path,original)
+        preferences=self.tool/'settings.json';preferences.write_text('{"workers":32,"review_mode":"quick"}')
+        before=(original.read_bytes(),original.stat().st_mtime_ns,preferences.read_bytes())
+        history=StateHistory(self.tool)
+        self.assertEqual(history.settings()['workers'],32)
+        self.assertEqual(len(history.list_states()[0]),2)
+        history.save_settings(history.settings())
+        self.assertEqual(before,(original.read_bytes(),original.stat().st_mtime_ns,preferences.read_bytes()))
+        self.assertEqual((history.states/original.name).read_bytes(),before[0])
+        self.assertEqual(history.settings()['workers'],32)
+
+    def test_internal_runtime_is_excluded_and_cannot_receive_reports(self):
+        internal=self.tool/'_internal';internal.mkdir();(internal/'runtime.dll').write_bytes(b'keep')
+        _,state=self.capture(self.tool)
+        self.assertEqual(state['file_count'],0)
+        with self.assertRaisesRegex(ValueError,'read-only'):
+            app.compare_files(self.capture()[0],self.capture()[0],internal/'bad.xlsx')
+        self.assertEqual((internal/'runtime.dll').read_bytes(),b'keep')

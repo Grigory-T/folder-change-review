@@ -81,12 +81,5 @@
     "sha256": "49480295043318cd38a03340b7942152ffe05e31d05ad5138a2896cbbc9ac150",
     "url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.9/crypto/evp/digest.c",
     "selection": "Complete leading notice comment, verbatim"
-  },
-  "LICENSE.bootloader-zlib.txt": {
-    "sha256": "f293edbac5cb1cc2f7801ce3f59cb79ba30b370f663ba8376b317bece2834aa6",
-    "url": "https://files.pythonhosted.org/packages/63/41/f90302845945abd4ed647933ff5ee7c6ac93983187be67f897b6cb613331/pyinstaller-6.22.3.tar.gz",
-    "archive_sha256": "05eb2f5615503e72939a7224d68b4aff572c6b0438ee4a17d0a4b481f399362d",
-    "member": "pyinstaller-6.22.3/bootloader/zlib/zlib.h",
-    "selection": "Complete leading license comment, verbatim"
   }
 }

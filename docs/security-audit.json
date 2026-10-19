@@ -1,12 +1,31 @@
 {
-  "version": "0.9.0",
+  "version": "0.10.0",
   "date": "2026-10-19",
-  "scope": "Portable storage including pre-Python extraction; no new Python runtime package.",
-  "runtime": {
+  "artifact": {
+    "name": "folder-change-review.exe",
+    "bytes": 2692234,
+    "sha256": "8a91ff29146f614fd8861da319ad4be2fbd1bc02ba9aba57a219d7fc280144f2",
+    "authenticode_signed": false,
+    "imports": [
+      "ADVAPI32.dll",
+      "COMCTL32.dll",
+      "GDI32.dll",
+      "KERNEL32.dll",
+      "USER32.dll"
+    ]
+  },
+  "distribution": {
+    "name": "folder-change-review-windows-x64.zip",
+    "bytes": 11937208,
+    "sha256": "821726581c00bfd69f74215069c9c173c3219af56df691a72bfef4380c8ce9fb"
+  },
+  "runtime_boundaries": {
     "Python_network_and_process_APIs_blocked": true,
     "supported_remote_filesystem": "SMB",
     "all_managed_storage_inside_portable_tool_folder": true,
     "AppData_or_system_temp_fallback": false,
+    "runtime_extraction": false,
+    "bundled_runtime_read_only": true,
     "project_documents_read_only": true,
     "owned_support_and_report_writes_allowed_inside_project": true,
     "native_GUI_application_TCP_connections": 0,
@@ -17,26 +36,12 @@
   "supply_chain": {
     "all_native_payloads_match_pinned_python": true,
     "native_payload_count": 23,
+    "runtime_files": 970,
     "new_Python_runtime_dependencies": [],
-    "portable_bootloader": {
-      "source": {
-        "version": "6.22.3",
-        "url": "https://files.pythonhosted.org/packages/63/41/f90302845945abd4ed647933ff5ee7c6ac93983187be67f897b6cb613331/pyinstaller-6.22.3.tar.gz",
-        "filename": "pyinstaller-6.22.3.tar.gz",
-        "sha256": "05eb2f5615503e72939a7224d68b4aff572c6b0438ee4a17d0a4b481f399362d",
-        "patched_files": {
-          "bootloader/src/pyi_utils_win32.c": "4c18b150fad09fae312ee5acb099951651754c77ec915c34e9f88bb7e09f9a0c",
-          "bootloader/wscript": "151247ea13d94ab64e221f3ceeefa20c88e9e12a4a4f2ebe5544633a5878b356"
-        },
-        "MSVC_toolset": "14.44.35207",
-        "Windows_SDK": "10.0.26100.0"
-      },
-      "corresponding_source_sha256": "c35bce115283b00835a7cc6875bc0ad0fb8f48a302eb0f883811beab8ad57bf9",
-      "portable_patch_sha256": "b5747191d9ef0aad5778a99146bdf8f8c57078439a876926adf48a9c8dcc62b3",
-      "bootloaders": {
-        "run.exe": "afc49afde92621c12e8af5a5d1b6bb02eff35247fec7483b6f6ab209075a678f",
-        "runw.exe": "143918c32ea03900885afc78477cb9d0f0df44c53000c1c44542408cde4b1f03"
-      }
+    "bootloader": {
+      "modified": false,
+      "origin": "Hash-locked PyInstaller wheel",
+      "input_sha256": "2291f269c3a3804fde1079462239e09a8b32fffbeeaa8f628a531faf5be77d41"
     },
     "dependency_advisories": {
       "tool": "pip-audit 2.10.1",
@@ -114,26 +119,34 @@
       "signature_version": "1.461.84.0",
       "limits": "A clean antivirus result does not prove absence of unknown threats.",
       "provider": "Microsoft Defender Antivirus",
-      "executable_sha256": "83ec83e832bd210de8d2e4de2756cd64ef9852855efc0acb0b9ebdfaa595d65f",
-      "checked_at_utc": "2026-10-19T09:22:44.8519356Z"
+      "executable_sha256": "8a91ff29146f614fd8861da319ad4be2fbd1bc02ba9aba57a219d7fc280144f2",
+      "checked_at_utc": "2026-10-19T11:26:50.0830135Z"
     }
   },
   "reproducibility": {
-    "byte_identical": true,
+    "byte_identical_executable": true,
+    "byte_identical_zip": true,
+    "runtime_file_set_and_hashes_identical": true,
+    "runtime_files": 970,
     "fresh_interpreters_and_venvs": true,
     "separate_build_directories": true,
-    "bootloaders_separately_compiled": true,
-    "bootloader_receipts_identical": true,
-    "sha256": "83ec83e832bd210de8d2e4de2756cd64ef9852855efc0acb0b9ebdfaa595d65f",
-    "bytes": 11966933,
-    "corresponding_source_sha256": "c35bce115283b00835a7cc6875bc0ad0fb8f48a302eb0f883811beab8ad57bf9"
+    "stock_bootloader": true,
+    "zip": {
+      "name": "folder-change-review-windows-x64.zip",
+      "bytes": 11937208,
+      "sha256": "821726581c00bfd69f74215069c9c173c3219af56df691a72bfef4380c8ce9fb"
+    },
+    "executable": {
+      "bytes": 2692234,
+      "sha256": "8a91ff29146f614fd8861da319ad4be2fbd1bc02ba9aba57a219d7fc280144f2"
+    }
   },
   "privacy": {
     "public_source_review_no_private_identifiers": true,
     "published_receipts_aggregate_only": true,
-    "public_files_checked": 68,
-    "embedded_payloads_checked": 1350,
-    "private_identifier_matches": 0
+    "payloads_checked": 1349,
+    "private_identifier_matches": 0,
+    "public_files_checked": 68
   },
   "limits": [
     "Not an operating-system sandbox or firewall.",

@@ -1,15 +1,20 @@
 {
-  "version": "0.9.0",
+  "version": "0.10.0",
   "date": "2026-10-19",
   "platform": "Windows 11 x86-64",
   "Linux_test_Python": "3.14.7",
   "Windows_Python": "3.13.16",
   "PyInstaller": "6.22.3",
   "XlsxWriter": "3.2.9",
+  "distribution": {
+    "name": "folder-change-review-windows-x64.zip",
+    "bytes": 11937208,
+    "sha256": "821726581c00bfd69f74215069c9c173c3219af56df691a72bfef4380c8ce9fb"
+  },
   "artifact": {
     "name": "folder-change-review.exe",
-    "bytes": 11966933,
-    "sha256": "83ec83e832bd210de8d2e4de2756cd64ef9852855efc0acb0b9ebdfaa595d65f",
+    "bytes": 2692234,
+    "sha256": "8a91ff29146f614fd8861da319ad4be2fbd1bc02ba9aba57a219d7fc280144f2",
     "authenticode_signed": false,
     "imports": [
       "ADVAPI32.dll",
@@ -19,28 +24,28 @@
       "USER32.dll"
     ]
   },
-  "tests": {
+  "test_suites": {
     "Linux_Xvfb": {
-      "tests": 105,
+      "tests": 110,
       "failures": 0,
       "errors": 0,
       "skipped": 0
     },
     "Windows_source": {
-      "tests": 105,
+      "tests": 110,
       "failures": 0,
       "errors": 0,
       "skipped": 0
     },
     "Windows_frozen": {
-      "tests": 105,
+      "tests": 110,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "frozen_runtime": true
     }
   },
-  "source_EXE_parity": {
+  "source_executable_parity": {
     "comparisons": [
       {
         "case": "empty",
@@ -143,8 +148,38 @@
     "older_runtime_rejects_current_state_format": true,
     "previous_runtime_reads_current_state_format": false
   },
-  "native_GUI_and_Excel": {
-    "runtime_extraction_beside_exe": true,
+  "portable_candidate_acceptance": {
+    "standard_onedir": true,
+    "exe_sha256": "8a91ff29146f614fd8861da319ad4be2fbd1bc02ba9aba57a219d7fc280144f2",
+    "all_modes": true,
+    "external_profile_temp_cwd_canary_unchanged": true,
+    "runtime_extraction": false,
+    "self_scan_excludes_internal_and_data": true,
+    "work_cleaned": true,
+    "whole_folder_copy_and_offline_compare": true,
+    "previous_root_history_import_preserves_originals": true,
+    "outside_output_rejected": true,
+    "data_junction_rejected": true,
+    "unwritable_tool_fails_without_fallback": true,
+    "ZIP_extraction_tested": false
+  },
+  "extracted_zip_acceptance": {
+    "standard_onedir": true,
+    "exe_sha256": "8a91ff29146f614fd8861da319ad4be2fbd1bc02ba9aba57a219d7fc280144f2",
+    "all_modes": true,
+    "external_profile_temp_cwd_canary_unchanged": true,
+    "runtime_extraction": false,
+    "self_scan_excludes_internal_and_data": true,
+    "work_cleaned": true,
+    "whole_folder_copy_and_offline_compare": true,
+    "previous_root_history_import_preserves_originals": true,
+    "outside_output_rejected": true,
+    "data_junction_rejected": true,
+    "unwritable_tool_fails_without_fallback": true,
+    "ZIP_extraction_tested": true
+  },
+  "native_gui_and_excel": {
+    "standard_onedir_without_extraction": true,
     "gui_partial_capture": true,
     "gui_read_issues_dialog": true,
     "gui_sampled_mode": true,
@@ -166,7 +201,7 @@
     "unknown_count": 1,
     "unknown_pivot_drilldown": true
   },
-  "native_Excel_modes": {
+  "native_excel_modes": {
     "quick": {
       "normal_excel_open": true,
       "rows": 6,
@@ -180,8 +215,8 @@
         "Size delta (MiB)": -9.5367431640625e-07
       },
       "changed_file_drilldown": true,
-      "open_seconds": 0.122,
-      "pivot_seconds": 0.262,
+      "open_seconds": 0.112,
+      "pivot_seconds": 0.243,
       "unknown": 0,
       "read_issues": 0
     },
@@ -198,8 +233,8 @@
         "Size delta (MiB)": -9.5367431640625e-07
       },
       "changed_file_drilldown": true,
-      "open_seconds": 0.118,
-      "pivot_seconds": 0.298,
+      "open_seconds": 0.122,
+      "pivot_seconds": 0.267,
       "unknown": 0,
       "read_issues": 0
     },
@@ -217,7 +252,7 @@
       },
       "changed_file_drilldown": true,
       "open_seconds": 0.122,
-      "pivot_seconds": 0.287,
+      "pivot_seconds": 0.286,
       "unknown": 0,
       "read_issues": 0
     }
@@ -253,38 +288,46 @@
   "local_metadata_speed_regression": [
     {
       "workers": 16,
-      "seconds_including_startup": 1.45,
+      "seconds_including_startup": 0.295,
       "files": 8000,
       "source_content_bytes_read": 0,
       "statistics": {
         "workers": 16,
         "bytes": 144000,
-        "scan_hash_seconds": 0.10363250000227708,
+        "scan_hash_seconds": 0.09342699999979232,
         "content_bytes_read": 0
       }
     },
     {
       "workers": 32,
-      "seconds_including_startup": 1.37,
+      "seconds_including_startup": 0.291,
       "files": 8000,
       "source_content_bytes_read": 0,
       "statistics": {
         "workers": 32,
         "bytes": 144000,
-        "scan_hash_seconds": 0.09869549999712035,
+        "scan_hash_seconds": 0.09128160000545904,
         "content_bytes_read": 0
       }
     }
   ],
   "reproducibility": {
-    "byte_identical": true,
+    "byte_identical_executable": true,
+    "byte_identical_zip": true,
+    "runtime_file_set_and_hashes_identical": true,
+    "runtime_files": 970,
     "fresh_interpreters_and_venvs": true,
     "separate_build_directories": true,
-    "bootloaders_separately_compiled": true,
-    "bootloader_receipts_identical": true,
-    "sha256": "83ec83e832bd210de8d2e4de2756cd64ef9852855efc0acb0b9ebdfaa595d65f",
-    "bytes": 11966933,
-    "corresponding_source_sha256": "c35bce115283b00835a7cc6875bc0ad0fb8f48a302eb0f883811beab8ad57bf9"
+    "stock_bootloader": true,
+    "zip": {
+      "name": "folder-change-review-windows-x64.zip",
+      "bytes": 11937208,
+      "sha256": "821726581c00bfd69f74215069c9c173c3219af56df691a72bfef4380c8ce9fb"
+    },
+    "executable": {
+      "bytes": 2692234,
+      "sha256": "8a91ff29146f614fd8861da319ad4be2fbd1bc02ba9aba57a219d7fc280144f2"
+    }
   },
   "limits": [
     "SMB acceptance used a disposable loopback share, not a production server.",

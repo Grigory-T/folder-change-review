@@ -56,12 +56,28 @@ def main():
             item['origin'] = 'python-distribution:'+known[item['sha256']]
             item['imports'] = imports(data)
         payloads.append(item)
+    runtime = {}
+    for path in sorted((args.exe.parent/'_internal').rglob('*')):
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        name = path.relative_to(args.exe.parent).as_posix()
+        item = {'path':name, 'type':'external', 'bytes':len(data), 'sha256':sha(data)}
+        runtime[name] = item['sha256']
+        if path.suffix.lower() in ('.dll','.pyd'):
+            if item['sha256'] not in known:
+                raise ValueError('Unknown native payload: '+name)
+            item['origin'] = 'python-distribution:'+known[item['sha256']]
+            item['imports'] = imports(data)
+        payloads.append(item)
+    if not runtime:
+        raise ValueError('The portable _internal runtime is missing.')
     modules = []
     for name, entry in sorted(pyz.toc.items()):
         data = pyz.extract(name)
         encoded = marshal.dumps(data) if entry[0] in (0, 1) else data
         modules.append({'name': name, 'sha256': sha(encoded)})
-    with zipfile.ZipFile(io.BytesIO(archive.extract('base_library.zip'))) as library:
+    with zipfile.ZipFile(args.exe.parent/'_internal/base_library.zip') as library:
         standard = [{'path': n, 'sha256': sha(library.read(n))} for n in sorted(library.namelist())]
     inputs = ['.gitattributes', 'BUILD-EXE.bat', 'windows_build/prepare-python.ps1',
               'windows_build/python-distribution.json', 'windows_build/requirements-build.txt',
@@ -69,7 +85,7 @@ def main():
               'windows_build/entry.py', 'windows_build/audit_artifact.py',
               'windows_build/inspect_exe.py', 'LICENSE', 'folder_change_review.py',
               'folder_change_review_ui.py', 'runtime_safety.py', 'state_store.py']
-    inputs += ['windows_build/prepare_bootloader.py', 'windows_build/portable_bootloader.c', 'windows_build/bootloader-pin.json']
+    inputs += ['windows_build/package_release.py', 'windows_build/verify_portable.py', 'windows_build/USAGE.txt']
     inputs += [p.relative_to(root).as_posix() for p in sorted((root/'licenses').glob('*.txt'))]
     pyinstaller = Path(importlib.metadata.distribution('pyinstaller').locate_file('PyInstaller'))
     bootloader = pyinstaller/'bootloader'/'Windows-64bit-intel'/'runw.exe'
@@ -84,7 +100,8 @@ def main():
                              'pip', 'pyinstaller', 'pyinstaller-hooks-contrib', 'altgraph',
                              'packaging', 'pefile', 'pywin32-ctypes', 'setuptools', 'xlsxwriter')},
                          'bootloader_input_sha256': sha(bootloader.read_bytes()),
-                         'portable_bootloader': json.loads((root/'.build/bootloader-build.json').read_text())},
+                         'bootloader_modified': False, 'packaging': 'PyInstaller onedir'},
+               'portable_runtime': {'file_sha256': runtime, 'files':len(runtime)},
                'source_inputs': {n: sha((root/n).read_bytes()) for n in sorted(inputs)},
                'payloads': payloads, 'python_modules': modules, 'standard_library': standard,
                'all_native_payloads_match_pinned_python': True}

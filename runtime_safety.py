@@ -12,7 +12,8 @@ _open_folder = None
 _output_paths = set()
 _operation_lock = threading.Lock()
 _directory = None
-MANAGED_DIRECTORIES = ("states", "work", "runtime", ".states")
+DATA_DIRECTORY = "folder-change-review-data"
+MANAGED_DIRECTORIES = (DATA_DIRECTORY, "_internal", "states", "work", "runtime", ".states")
 
 
 def pasted_path(value):
@@ -102,14 +103,23 @@ def ensure_managed_directory(path, directory=None):
 
 
 
+def data_directory():
+    return application_directory()/DATA_DIRECTORY
+
+
 def configure_portable_storage():
-    work = ensure_managed_directory(application_directory()/"work")
+    try:
+        work = ensure_managed_directory(data_directory()/"work")
+    except OSError as error:
+        raise OSError("Cannot write portable data beside the EXE. Place the tool in a writable folder.") from error
     os.environ["TMP"] = os.environ["TEMP"] = str(work)
     tempfile.tempdir = str(work)
     return work
 
 
 def portable_output(path):
+    if inside(path, application_directory()/"_internal"):
+        raise ValueError("The bundled _internal runtime is read-only; keep outputs in the tool data folder.")
     if not inside(path, application_directory()):
         raise ValueError("All states and reports must stay inside the folder containing the EXE.")
 
@@ -119,6 +129,8 @@ def owned_path(path):
     if candidate == os.path.join(base, "settings.json"):
         return True
     for name in MANAGED_DIRECTORIES:
+        if name == "_internal":
+            continue
         parent = os.path.join(base, name)
         if candidate == parent or candidate.startswith(parent + os.sep):
             return True
@@ -213,7 +225,7 @@ def _safe_operation(roots, output_directory):
     with offline_runtime():
         _roots = roots
         try:
-            parent = ensure_managed_directory(application_directory()/"work")
+            parent = ensure_managed_directory(data_directory()/"work")
             with tempfile.TemporaryDirectory(prefix="operation-", dir=extended(parent)) as workspace:
                 tempfile.tempdir = workspace
                 try:

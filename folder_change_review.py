@@ -24,7 +24,7 @@ from runtime_safety import absolute, application_directory, extended, inside, of
 from state_store import read_container, validate_coverage, write_container
 
 sys.dont_write_bytecode = True
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 OUTPUT_FILE = "folder-change-review.xlsx"
 SNAPSHOT_FORMAT = "folder-change-review.snapshot"
 EXCLUSIONS = ["~*", "Thumbs.db", "*.tmp", "*.temp", "*.fcrstate", ".states/", "folder-change-review.exe", OUTPUT_FILE,
@@ -362,7 +362,7 @@ def _create_snapshot(root, output, workers, progress, mode):
     hash_seconds = time.perf_counter() - timer
     files.sort(key=lambda record: record["path"])
     issues.sort(key=lambda issue: (issue["path"], issue["kind"]))
-    snapshot = {"format": SNAPSHOT_FORMAT, "version": 6, "excluded_tool_paths": excluded_paths, "review_mode": mode,
+    snapshot = {"format": SNAPSHOT_FORMAT, "version": 7, "excluded_tool_paths": excluded_paths, "review_mode": mode,
                 "hash_algorithm": {"quick": "none", "sampled": "sha256-sample-v1", "full": "sha256"}[mode], "root": root,
                 "started_utc": started, "completed_utc": now(),
                 "exclusions": EXCLUSIONS, **stats, "files": files, "file_count": len(files),
@@ -386,7 +386,7 @@ def load_snapshot(path: str | Path) -> dict:
         # Read compatibility for earlier machine JSON states; new states are compressed.
         with open(extended(path), encoding="utf-8") as stream:
             snapshot = json.load(stream)
-    if snapshot.get("format") != SNAPSHOT_FORMAT or snapshot.get("version") not in (1, 2, 3, 4, 5, 6):
+    if snapshot.get("format") != SNAPSHOT_FORMAT or snapshot.get("version") not in (1, 2, 3, 4, 5, 6, 7):
         raise ValueError(f"Unsupported snapshot format: {path}")
     validate_coverage(snapshot)
     seen = set()
@@ -398,7 +398,7 @@ def load_snapshot(path: str | Path) -> dict:
                 or (review_mode(snapshot) == "quick" and digest is not None)
                 or (review_mode(snapshot) != "quick" and (not isinstance(digest, str) or len(digest) != 64
                     or any(char not in "0123456789abcdef" for char in digest)))
-                or (snapshot.get("version") in (5, 6) and (type(record.get("mtime_ns")) is not int))
+                or (snapshot.get("version") in (5, 6, 7) and (type(record.get("mtime_ns")) is not int))
                 or type(size) is not int or size < 0):
             raise ValueError(f"Invalid file record in snapshot: {path}")
         if full_path in seen:

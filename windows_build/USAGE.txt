@@ -1,0 +1,30 @@
+Folder Change Review for Windows x86-64
+
+Extract the ZIP into a writable folder. Run folder-change-review.exe.
+Keep the EXE and _internal folder together when copying or moving the tool.
+Do not run it directly inside a ZIP viewer.
+
+1. Choose a project folder and create a state. Repeat at another time.
+2. Choose two saved states of the same review mode and create the Excel report.
+
+folder-change-review.exe       application
+_internal/                     bundled runtime; keep unchanged
+folder-change-review-data/     states, settings and temporary work (created on use)
+folder-change-review.xlsx      latest report, ready for your own pivot table
+
+All automatic data stays in this portable folder. There is no AppData or
+system-temp extraction/fallback. Copy the whole folder to retain history.
+Local and SMB project folders are supported. The tool folder may itself be on
+SMB if Windows and the server allow EXE/DLL execution and writing there.
+
+Quick review is fast: it compares size and modification time without content
+reads. It can miss an edit that preserves both. Sampled contents can miss edits
+outside its first/middle/last samples. Full contents reads every file. Compare
+two states captured with the same mode. No hash column is exported to Excel.
+
+Formats from earlier releases remain readable. Root-level states/settings and
+legacy .states in this tool folder are read and copied into the data directory
+on the next operation. Original files are preserved. No profile history lookup.
+
+Source, validation and reproducible build instructions:
+https://github.com/Grigory-T/folder-change-review

@@ -15,7 +15,7 @@ import tempfile
 import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import folder_change_review as app
-from runtime_safety import extended, portable_directory
+from runtime_safety import extended, portable_directory, DATA_DIRECTORY
 from state_store import StateHistory
 from windows_build.verify import normalized_workbook
 
@@ -39,7 +39,7 @@ def main():
                                   env=poison, capture_output=True, timeout=120).returncode
         def exercise(tool, smb=False):
             tool.mkdir(parents=True)
-            exe = tool/'folder-change-review.exe'; shutil.copyfile(args.exe, exe)
+            exe = tool/'folder-change-review.exe'; shutil.copyfile(args.exe, exe); shutil.copytree(args.exe.parent/'_internal',tool/'_internal')
             document = tool/'Document.pdf'; document.write_bytes(b'before')
             unrelated = tool/'Documents/states'; unrelated.mkdir(parents=True)
             (unrelated/'Actual.pdf').write_bytes(b'actual')
@@ -64,8 +64,8 @@ def main():
                 assert app.load_snapshot(c)['files'] == second['files']
                 assert run(exe, 'compare', '--before', a, '--after', b, '--output', outside/'escaped.xlsx') == 1
                 assert run(exe, 'snapshot', '--root', tool, '--output', outside/'escaped.fcrstate') == 1
-                assert not list((tool/'work').iterdir())
-                assert not list((tool/'runtime').iterdir())
+                assert not list((tool/DATA_DIRECTORY/'work').iterdir())
+                assert not (tool/'runtime').exists()
                 assert history.settings()['project'] == str(tool)
             shutil.copyfile(report, args.work/('SMB.xlsx' if smb else 'portable.xlsx'))
             return a.name, b.name
@@ -82,16 +82,16 @@ def main():
             assert history.settings()['project'] == str(copied)
             # Remove the project documents; compare must use saved states only.
             (copied/'Document.pdf').unlink(); shutil.rmtree(copied/'Documents')
-            assert run(copied/'folder-change-review.exe', 'compare', '--before', copied/'states'/names[0],
-                       '--after', copied/'states'/names[1]) == 0
-            assert not list((copied/'runtime').iterdir())
+            assert run(copied/'folder-change-review.exe', 'compare', '--before', copied/DATA_DIRECTORY/'states'/names[0],
+                       '--after', copied/DATA_DIRECTORY/'states'/names[1]) == 0
+            assert not (copied/'runtime').exists()
         result['copied_folder_keeps_history_settings_and_offline_compare'] = True
         # Long project and state paths under an ordinary executable location.
         long_root = copied/'Project'
         for i in range(5): long_root /= str(i)+'-'+'long-path-'*6
         Path(extended(long_root)).mkdir(parents=True)
         Path(extended(long_root/'File.pdf')).write_bytes(b'file')
-        state = copied/'states'
+        state = copied/DATA_DIRECTORY/'states'
         for i in range(5): state /= str(i)+'-'+'long-state-'*6
         Path(extended(state)).mkdir(parents=True)
         state /= 'long.fcrstate'

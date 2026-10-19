@@ -40,7 +40,7 @@ def main():
     for name, entry in archive.toc.items():
         if entry[-1] == 's':
             inspect(marshal.loads(archive.extract(name)))
-    with zipfile.ZipFile(io.BytesIO(archive.extract('base_library.zip'))) as standard:
+    with zipfile.ZipFile(args.exe.parent/'_internal/base_library.zip') as standard:
         assert standard.namelist() == sorted(standard.namelist())
         for name in standard.namelist():
             if name.endswith('.pyc'):

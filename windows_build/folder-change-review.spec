@@ -31,8 +31,9 @@ for destination, source, _ in a.datas:
                 target_zip.writestr(info, source_zip.read(info.filename))
         ordered.replace(library)
 pyz = PYZ(a.pure)
+name = "folder-change-review-tests" if testing else "folder-change-review"
 exe = EXE(
-    pyz, a.scripts, a.binaries, a.datas, [],
-    name="folder-change-review-tests" if testing else "folder-change-review", debug=False, strip=False, upx=False,
-    console=testing, runtime_tmpdir="@executable",
+    pyz, a.scripts, [], exclude_binaries=True,
+    name=name, debug=False, strip=False, upx=False, console=testing,
 )
+collection = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name=name)

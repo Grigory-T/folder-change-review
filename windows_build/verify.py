@@ -151,8 +151,15 @@ def main():
         if args.previous_exe:
             project = base/'compatibility'; project.mkdir()
             (project/'sample.pdf').write_bytes(b'previous release content')
-            previous = base/'previous.fcrstate'; current = base/'current.fcrstate'
-            subprocess.run([str(args.previous_exe),'snapshot','--root',str(project),'--output',str(previous),'--mode','full'],check=True,timeout=60)
+            # The previous portable release also confines its output beside its EXE.
+            import shutil
+            legacy_tool=base/'previous-tool';legacy_tool.mkdir()
+            previous_exe=legacy_tool/args.previous_exe.name
+            shutil.copyfile(args.previous_exe,previous_exe)
+            if (args.previous_exe.parent/'_internal').is_dir():
+                shutil.copytree(args.previous_exe.parent/'_internal',legacy_tool/'_internal')
+            previous = legacy_tool/'previous.fcrstate'; current = base/'current.fcrstate'
+            subprocess.run([str(previous_exe),'snapshot','--root',str(project),'--output',str(previous),'--mode','full'],check=True,timeout=60)
             subprocess.run([str(args.exe),'snapshot','--root',str(project),'--output',str(current),'--mode','full'],check=True,timeout=60)
             assert [{k: v for k, v in row.items() if k != 'mtime_ns'} for row in app.load_snapshot(previous)['files']] == [{k: v for k, v in row.items() if k != 'mtime_ns'} for row in app.load_snapshot(current)['files']]
             source_report = base/'compat-source.xlsx'; frozen_report = base/'compat-exe.xlsx'
@@ -161,9 +168,9 @@ def main():
             assert counts == {'Unchanged':1}
             subprocess.run([str(args.exe),'compare','--before',str(previous),'--after',str(current),'--output',str(frozen_report)],check=True,timeout=60)
             assert normalized_workbook(source_report) == normalized_workbook(frozen_report)
-            rejected = base/'old-runtime-must-not-export.xlsx'
+            rejected = legacy_tool/'old-runtime-must-not-export.xlsx'
             previous_compatible = app.load_snapshot(previous)['version'] == app.load_snapshot(current)['version']
-            code = subprocess.run([str(args.previous_exe),'compare','--before',str(current),'--after',str(current),'--output',str(rejected)],timeout=60).returncode
+            code = subprocess.run([str(previous_exe),'compare','--before',str(current),'--after',str(current),'--output',str(rejected)],timeout=60).returncode
             assert code == (0 if previous_compatible else 1)
             assert rejected.exists() == previous_compatible
             comparisons.append({'case':'previous-release-state','rows':1,'all_workbook_members_equal':True})

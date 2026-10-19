@@ -3,7 +3,7 @@
 Folder Change Review runs on the Windows machine. There is no telemetry,
 update checker, web client, remote execution service or automatic download in the
 application. Supported remote filesystem access is SMB, including mapped drives.
-The EXE may be stored on SMB with Execute permission; runtime extraction, states, settings, workspaces and reports stay beside the EXE.
+The EXE may be stored on SMB with Execute permission; its runtime, states, settings, workspaces and reports stay beside the EXE.
 No AppData or system-temp fallback is used, including for an SMB-hosted EXE.
 
 Python socket/DNS/HTTP APIs and subprocess launches are blocked during normal
@@ -17,7 +17,7 @@ are not supported or tested.
 Quick review enumerates directory metadata without opening file contents.
 Optional content modes open project files for reading. The application does not modify content,
 permissions or timestamps of inspected documents. Reads may affect access times
-according to filesystem policy. The only intended project writes are the tool's own portable support paths,
+according to filesystem policy. The only intended project writes are the tool's `folder-change-review-data` support paths,
 report and atomic-save staging files when the tool is placed within the project.
 All these locations stay inside the tool folder. Supporting directories must be
 real directories rather than links/junctions. Original legacy states are read
@@ -42,12 +42,11 @@ code.
 See [reproducible build instructions](docs/build.md), the published component
 inventory and [third-party notices](THIRD-PARTY-NOTICES.md). Python and package
 inputs are version/hash pinned. All embedded DLL/PYD bytes are checked against
-the verified Python distribution. The PyInstaller bootloader is compiled from hash-verified upstream source with
-the public `windows_build/portable_bootloader.c` change. It selects `runtime`
-relative to its executable before Python starts, rejects a linked runtime folder,
-and fails without falling back to other storage. The complete patched source,
-source checksum, build recipe and bootloader hashes are published. Packaging
-changes executable resources and appends the application archive. No UPX, archive utility or additional downloaded executable
+the verified Python distribution. The unmodified upstream PyInstaller bootloader comes from the hash-locked wheel.
+The portable ZIP contains an EXE and its already extracted `_internal` runtime.
+The complete runtime file/hash set is inventoried; output into `_internal` is
+rejected. There is no pre-Python runtime extraction or custom native launcher.
+No UPX, archive utility or additional downloaded executable
 is bundled.
 
 Build/setup/audit tools may access public upstream repositories. They are never
