@@ -1,12 +1,35 @@
 # Folder Change Review
 
+> **Retired on 2026-10-21. This standalone project is no longer maintained.**
+> Folder inventory and change comparison are now developed together in
+> [Folder Review](https://github.com/Grigory-T/folder-review).
+> Use [Folder Review releases](https://github.com/Grigory-T/folder-review/releases/latest)
+> for current downloads. This repository and its releases are retained for history
+> and source/build auditing; no further releases, fixes or security updates are planned here.
+
+## Use Folder Review for new work
+
+1. Extract the current Folder Review Windows ZIP into a fresh local folder.
+2. Edit `folder-review.txt`, then run `folder-review.bat` to capture timestamped XLSX states.
+3. Set the two XLSX paths in `folder-change-review.txt`, then run `folder-change-review.bat`.
+
+Folder Review comparison requires compatible XLSX states created by Folder Review
+0.20 or later, using the same state mode. Standalone `.fcrstate` histories are
+**not imported**. Keep existing histories and the old tool together if you need
+historical comparisons; create new XLSX states for the supported workflow.
+
+All further development takes place in Folder Review. The documentation below
+records the final standalone v0.10.0 behavior and is historical.
+
+## Historical standalone tool
+
 A standalone Windows x86-64 tool for reviewing changes in a project folder.
 Capture states manually, choose two capture times, and create plain Excel data
 for your own pivot table. Local folders, SMB shares and mapped drives are supported.
 
-## Windows portable ZIP
+## Historical Windows portable ZIP
 
-Download `folder-change-review-windows-x64.zip` from [Releases](https://github.com/Grigory-T/folder-change-review/releases/latest).
+The final, unsupported `folder-change-review-windows-x64.zip` remains in [historical releases](https://github.com/Grigory-T/folder-change-review/releases/latest).
 No Python or installation is required.
 
 1. Extract the ZIP into a writable folder. Keep the EXE and `_internal` together. It may be inside the project or on an SMB share that allows EXE execution.

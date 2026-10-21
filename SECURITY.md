@@ -1,3 +1,8 @@
+> **Retired on 2026-10-21.** This standalone project receives no maintenance or
+> security updates. Use [Folder Review](https://github.com/Grigory-T/folder-review)
+> for current development and its security policy for issues affecting that project.
+> The boundaries and audit information below describe historical standalone releases.
+
 # Runtime and data boundaries
 
 Folder Change Review runs on the Windows machine. There is no telemetry,
@@ -56,7 +61,7 @@ releases. The EXE is unsigned; SHA-256 verification and reproducible builds are
 available for independent checking. Antivirus and dependency checks reduce risk;
 they cannot prove the absence of every vulnerability or malicious component.
 
-To report a security issue, contact the repository maintainer through their
-GitHub profile. Do not put private project inventories, paths, documents or
-credentials into public issues. No project data is needed to reproduce a generic
-bug; use a small synthetic fixture.
+This retired repository has no active security response or fix commitment.
+For issues affecting the maintained successor, follow Folder Review's security
+policy. Do not put private inventories, paths, documents or credentials into
+public reports; use a small synthetic fixture.
